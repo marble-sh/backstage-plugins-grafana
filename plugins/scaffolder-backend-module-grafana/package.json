@@ -1,0 +1,69 @@
+{
+  "name": "@marble-sh/backstage-plugin-scaffolder-backend-module-grafana",
+  "version": "0.1.0",
+  "description": "Scaffolder backend module with actions for provisioning Grafana dashboards",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "backstage": {
+    "role": "backend-plugin-module",
+    "pluginId": "scaffolder",
+    "pluginPackage": "@backstage/plugin-scaffolder-backend"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "start": "backstage-cli package start",
+    "build": "backstage-cli package build",
+    "clean": "backstage-cli package clean",
+    "lint": "backstage-cli package lint",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack",
+    "test": "backstage-cli package test"
+  },
+  "dependencies": {
+    "@backstage/backend-plugin-api": "backstage:^",
+    "@backstage/config": "backstage:^",
+    "@backstage/errors": "backstage:^",
+    "@backstage/plugin-scaffolder-node": "backstage:^",
+    "@marble-sh/backstage-plugin-grafana-node": "workspace:^"
+  },
+  "devDependencies": {
+    "@backstage/backend-test-utils": "backstage:^",
+    "@backstage/cli": "backstage:^",
+    "@backstage/plugin-scaffolder-node-test-utils": "backstage:^",
+    "@backstage/types": "backstage:^"
+  },
+  "files": [
+    "dist",
+    "config.d.ts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marble-sh/backstage-plugins-grafana",
+    "directory": "plugins/scaffolder-backend-module-grafana"
+  },
+  "keywords": [
+    "backstage",
+    "plugin",
+    "grafana",
+    "scaffolder"
+  ],
+  "author": "Cassidy Marble",
+  "homepage": "https://github.com/marble-sh/backstage-plugins-grafana/tree/main/plugins/scaffolder-backend-module-grafana",
+  "bugs": "https://github.com/marble-sh/backstage-plugins-grafana/issues",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "package.json": [
+        "package.json"
+      ]
+    }
+  },
+  "configSchema": "config.d.ts"
+}

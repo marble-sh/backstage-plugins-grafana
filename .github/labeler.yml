@@ -1,0 +1,49 @@
+# Path-based rules for the PR Labeler workflow (.github/workflows/pr-labeler.yml).
+# Uses the actions/labeler@v5 configuration format.
+
+'area/frontend':
+  - changed-files:
+      - any-glob-to-any-file: 'plugins/grafana/**'
+
+'area/backend':
+  - changed-files:
+      - any-glob-to-any-file: 'plugins/grafana-backend/**'
+
+'area/common':
+  - changed-files:
+      - any-glob-to-any-file: 'plugins/grafana-common/**'
+
+'area/node':
+  - changed-files:
+      - any-glob-to-any-file: 'plugins/grafana-node/**'
+
+'area/catalog':
+  - changed-files:
+      - any-glob-to-any-file: 'plugins/catalog-backend-module-grafana/**'
+
+'area/scaffolder':
+  - changed-files:
+      - any-glob-to-any-file: 'plugins/scaffolder-backend-module-grafana/**'
+
+'area/ci':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - '.yarnrc.yml'
+          - '.changeset/**'
+          - 'tsconfig.json'
+          - 'package.json'
+
+'area/docs':
+  - changed-files:
+      # Note: deliberately not '**/*.md' — that would match .changeset/*.md and
+      # label every PR that (correctly) carries a changeset as area/docs.
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '*.md'
+          - 'plugins/**/README.md'
+          - '.github/**/*.md'
+
+'dependencies':
+  - changed-files:
+      - any-glob-to-any-file: 'yarn.lock'

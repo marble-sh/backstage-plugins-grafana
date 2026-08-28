@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & discussions
+    url: https://github.com/marble-sh/backstage-plugins-grafana/discussions
+    about: Ask a question or start a discussion instead of filing an issue.
+  - name: Backstage documentation
+    url: https://backstage.io/docs
+    about: For general Backstage questions, see the upstream docs.

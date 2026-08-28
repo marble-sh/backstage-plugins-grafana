@@ -1,0 +1,23 @@
+name: PR Labeler
+
+# Applies area labels to pull requests based on the files they touch.
+# Runs on pull_request_target so labeling works for fork PRs; it never checks
+# out or executes PR code (the labeler reads its config from the base branch).
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    name: Apply area labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Label by changed paths
+        uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          sync-labels: true

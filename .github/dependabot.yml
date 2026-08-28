@@ -1,0 +1,17 @@
+# Dependabot keeps GitHub Actions pinned versions up to date.
+#
+# Note: npm/yarn dependencies are intentionally NOT managed by Dependabot here.
+# Backstage packages use the `backstage:^` version protocol and are upgraded as
+# a set with `yarn backstage-cli versions:bump`, which Dependabot does not
+# understand. Run that command manually to bump Backstage versions.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'ci'
+    labels:
+      - dependencies
+      - github-actions

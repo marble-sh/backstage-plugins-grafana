@@ -1,0 +1,67 @@
+{
+  "name": "@marble-sh/backstage-plugin-grafana-node",
+  "version": "0.1.0",
+  "description": "Node-side library for the Grafana Backstage plugins: the Grafana HTTP client, instance configuration, and filtering helpers shared by the backend plugin and catalog module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "backstage": {
+    "role": "node-library",
+    "pluginId": "grafana",
+    "pluginPackages": [
+      "@marble-sh/backstage-plugin-grafana",
+      "@marble-sh/backstage-plugin-grafana-backend",
+      "@marble-sh/backstage-plugin-grafana-common",
+      "@marble-sh/backstage-plugin-grafana-node"
+    ]
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "backstage-cli package build",
+    "clean": "backstage-cli package clean",
+    "lint": "backstage-cli package lint",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack",
+    "test": "backstage-cli package test"
+  },
+  "dependencies": {
+    "@backstage/config": "backstage:^",
+    "@backstage/errors": "backstage:^",
+    "@marble-sh/backstage-plugin-grafana-common": "workspace:^"
+  },
+  "devDependencies": {
+    "@backstage/cli": "backstage:^"
+  },
+  "files": [
+    "dist",
+    "config.d.ts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marble-sh/backstage-plugins-grafana",
+    "directory": "plugins/grafana-node"
+  },
+  "keywords": [
+    "backstage",
+    "plugin",
+    "grafana"
+  ],
+  "author": "Cassidy Marble",
+  "homepage": "https://github.com/marble-sh/backstage-plugins-grafana/tree/main/plugins/grafana-node",
+  "bugs": "https://github.com/marble-sh/backstage-plugins-grafana/issues",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "package.json": [
+        "package.json"
+      ]
+    }
+  },
+  "configSchema": "config.d.ts"
+}

@@ -1,0 +1,115 @@
+# Canonical label definitions for this repository.
+#
+# These are synced to GitHub by .github/workflows/labels.yml (using
+# crazy-max/ghaction-github-labeler). Edit here, then let the workflow apply
+# them — this file is the single source of truth for the repo's labels.
+
+# --- Type -------------------------------------------------------------------
+- name: bug
+  color: d73a4a
+  description: Something isn't working
+- name: enhancement
+  color: a2eeef
+  description: New feature or request
+- name: documentation
+  color: 0075ca
+  description: Improvements or additions to documentation
+- name: refactor
+  color: fbca9d
+  description: Code change that neither fixes a bug nor adds a feature
+- name: test
+  color: c2e0c6
+  description: Adding or improving tests
+- name: performance
+  color: 5319e7
+  description: Performance improvement
+- name: security
+  color: b60205
+  description: Security-related issue or fix
+- name: dependencies
+  color: 0366d6
+  description: Dependency updates
+- name: breaking-change
+  color: d93f0b
+  description: Backwards-incompatible change
+
+# --- Semver (for changeset review) ------------------------------------------
+- name: 'semver:major'
+  color: b60205
+  description: Requires a major version bump
+- name: 'semver:minor'
+  color: 0e8a16
+  description: Requires a minor version bump
+- name: 'semver:patch'
+  color: fbca04
+  description: Requires a patch version bump
+
+# --- Area / package ---------------------------------------------------------
+- name: 'area/frontend'
+  color: 1d76db
+  description: The grafana frontend plugin
+- name: 'area/backend'
+  color: 0e8a16
+  description: The grafana-backend plugin
+- name: 'area/common'
+  color: 006b75
+  description: The grafana-common package
+- name: 'area/node'
+  color: 006b75
+  description: The grafana-node library
+- name: 'area/catalog'
+  color: bfdadc
+  description: The catalog-backend-module-grafana package
+- name: 'area/scaffolder'
+  color: c5def5
+  description: The scaffolder-backend-module-grafana package
+- name: 'area/ci'
+  color: ededed
+  description: CI, tooling, and repository automation
+- name: 'area/docs'
+  color: bfd4f2
+  description: Documentation, README, and ADRs
+
+# --- Triage / status --------------------------------------------------------
+- name: triage
+  color: fbca04
+  description: Needs triage by a maintainer
+- name: 'needs-more-info'
+  color: e99695
+  description: Waiting on more information from the reporter
+- name: blocked
+  color: 000000
+  description: Blocked by another issue or external dependency
+- name: 'work-in-progress'
+  color: fef2c0
+  description: Not ready to merge yet
+- name: stale
+  color: cccccc
+  description: Inactive for a long time
+
+# --- Community --------------------------------------------------------------
+- name: 'good first issue'
+  color: 7057ff
+  description: Good for newcomers
+- name: 'help wanted'
+  color: 008672
+  description: Extra attention is needed
+
+# --- Resolution -------------------------------------------------------------
+- name: duplicate
+  color: cfd3d7
+  description: This issue or pull request already exists
+- name: invalid
+  color: e4e669
+  description: This doesn't seem right
+- name: wontfix
+  color: ffffff
+  description: This will not be worked on
+
+# --- Automation -------------------------------------------------------------
+- name: 'github-actions'
+  color: '000000'
+  description: Pull requests that update GitHub Actions
+- name: automated
+  color: ededed
+  description: Opened by automation

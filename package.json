@@ -1,0 +1,66 @@
+{
+  "name": "@marble-sh/grafana-plugins",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backstage plugins for integrating Grafana dashboards and alerts",
+  "author": "Cassidy Marble",
+  "engines": {
+    "node": "22 || 24"
+  },
+  "scripts": {
+    "start": "backstage-cli repo start",
+    "build:all": "backstage-cli repo build --all",
+    "build:api-reports": "backstage-repo-tools api-reports -o ae-wrong-input-file-type --validate-release-tags",
+    "tsc": "tsc",
+    "tsc:full": "tsc --skipLibCheck false --incremental false",
+    "clean": "backstage-cli repo clean",
+    "test": "backstage-cli repo test",
+    "test:all": "backstage-cli repo test --coverage",
+    "fix": "backstage-cli repo fix",
+    "fix:check": "backstage-cli repo fix --check --publish",
+    "lint": "backstage-cli repo lint --since origin/main",
+    "lint:all": "backstage-cli repo lint",
+    "prettier:check": "prettier --check .",
+    "prettier:fix": "prettier --write .",
+    "new": "backstage-cli new --scope @marble-sh",
+    "changeset": "changeset",
+    "release:version": "changeset version",
+    "release:publish": "yarn build:all && changeset publish"
+  },
+  "backstage": {
+    "cli": {
+      "new": {
+        "globals": {
+          "license": "Apache-2.0",
+          "private": false
+        }
+      }
+    }
+  },
+  "workspaces": [
+    "plugins/*"
+  ],
+  "devDependencies": {
+    "@backstage/cli": "backstage:^",
+    "@backstage/cli-defaults": "backstage:^",
+    "@backstage/e2e-test-utils": "backstage:^",
+    "@backstage/repo-tools": "backstage:^",
+    "@changesets/cli": "^2.27.1",
+    "@jest/environment-jsdom-abstract": "~30.2.0",
+    "@types/jest": "^30.0.0",
+    "jest": "~30.2.0",
+    "jsdom": "^27.1.0",
+    "prettier": "^2.3.2",
+    "typescript": "~5.8.0"
+  },
+  "resolutions": {
+    "@types/react": "^18",
+    "@types/react-dom": "^18"
+  },
+  "prettier": "@backstage/cli/config/prettier",
+  "packageManager": "yarn@4.14.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marble-sh/backstage-plugins-grafana"
+  }
+}

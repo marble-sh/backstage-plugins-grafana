@@ -1,0 +1,70 @@
+{
+  "name": "@marble-sh/backstage-plugin-catalog-backend-module-grafana",
+  "version": "0.1.0",
+  "description": "Catalog backend module that discovers Grafana instances and dashboards as catalog entities",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "backstage": {
+    "role": "backend-plugin-module",
+    "pluginId": "catalog",
+    "pluginPackage": "@backstage/plugin-catalog-backend"
+  },
+  "sideEffects": false,
+  "configSchema": "config.d.ts",
+  "scripts": {
+    "start": "backstage-cli package start",
+    "build": "backstage-cli package build",
+    "clean": "backstage-cli package clean",
+    "lint": "backstage-cli package lint",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack",
+    "test": "backstage-cli package test"
+  },
+  "dependencies": {
+    "@backstage/backend-plugin-api": "backstage:^",
+    "@backstage/catalog-model": "backstage:^",
+    "@backstage/config": "backstage:^",
+    "@backstage/errors": "backstage:^",
+    "@backstage/plugin-catalog-node": "backstage:^",
+    "@marble-sh/backstage-plugin-grafana-common": "workspace:^",
+    "@marble-sh/backstage-plugin-grafana-node": "workspace:^"
+  },
+  "devDependencies": {
+    "@backstage/backend-test-utils": "backstage:^",
+    "@backstage/cli": "backstage:^",
+    "@backstage/types": "backstage:^"
+  },
+  "files": [
+    "dist",
+    "config.d.ts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marble-sh/backstage-plugins-grafana",
+    "directory": "plugins/catalog-backend-module-grafana"
+  },
+  "keywords": [
+    "backstage",
+    "plugin",
+    "grafana",
+    "catalog"
+  ],
+  "author": "Cassidy Marble",
+  "homepage": "https://github.com/marble-sh/backstage-plugins-grafana/tree/main/plugins/catalog-backend-module-grafana",
+  "bugs": "https://github.com/marble-sh/backstage-plugins-grafana/issues",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "package.json": [
+        "package.json"
+      ]
+    }
+  }
+}

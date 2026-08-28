@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a problem with one of the Grafana plugins
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill in as much
+        of the form below as you can.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected package
+      description: Which package is this about?
+      options:
+        - '@marble-sh/backstage-plugin-grafana (frontend)'
+        - '@marble-sh/backstage-plugin-grafana-backend'
+        - '@marble-sh/backstage-plugin-grafana-common'
+        - '@marble-sh/backstage-plugin-grafana-node'
+        - '@marble-sh/backstage-plugin-catalog-backend-module-grafana'
+        - '@marble-sh/backstage-plugin-scaffolder-backend-module-grafana'
+        - "Don't know / multiple"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps (and config, with secrets redacted) to reproduce.
+      placeholder: |
+        1. Configure grafana.instances with ...
+        2. Open ...
+        3. See error ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or errors
+      description: Paste any relevant backend logs or browser console output. Redact tokens.
+      render: shell
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Backstage version, plugin version(s), and Grafana version/deployment (Cloud or self-hosted).
+    validations:
+      required: true
