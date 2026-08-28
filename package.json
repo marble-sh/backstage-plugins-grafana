@@ -25,7 +25,7 @@
     "new": "backstage-cli new --scope @marble-sh",
     "changeset": "changeset",
     "release:version": "changeset version",
-    "release:publish": "yarn build:all && changeset publish"
+    "release:publish": "yarn tsc && yarn build:all && changeset publish"
   },
   "backstage": {
     "cli": {
