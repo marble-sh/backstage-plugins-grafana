@@ -1,0 +1,79 @@
+{
+  "name": "@marble-sh/backstage-plugin-grafana-backend",
+  "version": "0.1.0",
+  "description": "Backend for the Grafana Backstage plugin: reads dashboards and alerts from Grafana, caches them, and exposes a read-only REST API",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "backstage": {
+    "role": "backend-plugin",
+    "pluginId": "grafana",
+    "pluginPackages": [
+      "@marble-sh/backstage-plugin-grafana",
+      "@marble-sh/backstage-plugin-grafana-backend",
+      "@marble-sh/backstage-plugin-grafana-common",
+      "@marble-sh/backstage-plugin-grafana-node"
+    ]
+  },
+  "sideEffects": false,
+  "configSchema": "config.d.ts",
+  "scripts": {
+    "start": "backstage-cli package start",
+    "build": "backstage-cli package build",
+    "clean": "backstage-cli package clean",
+    "lint": "backstage-cli package lint",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack",
+    "test": "backstage-cli package test"
+  },
+  "dependencies": {
+    "@backstage/backend-plugin-api": "backstage:^",
+    "@backstage/config": "backstage:^",
+    "@backstage/errors": "backstage:^",
+    "@backstage/types": "backstage:^",
+    "@marble-sh/backstage-plugin-grafana-common": "workspace:^",
+    "@marble-sh/backstage-plugin-grafana-node": "workspace:^",
+    "express": "^4.17.1",
+    "express-promise-router": "^4.1.0",
+    "knex": "^3.0.0"
+  },
+  "devDependencies": {
+    "@backstage/backend-test-utils": "backstage:^",
+    "@backstage/cli": "backstage:^",
+    "@types/express": "^4.17.6",
+    "@types/supertest": "^2.0.12",
+    "supertest": "^6.2.4"
+  },
+  "files": [
+    "dist",
+    "config.d.ts",
+    "migrations/**/*.{js,d.ts}"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marble-sh/backstage-plugins-grafana",
+    "directory": "plugins/grafana-backend"
+  },
+  "keywords": [
+    "backstage",
+    "plugin",
+    "grafana"
+  ],
+  "author": "Cassidy Marble",
+  "homepage": "https://github.com/marble-sh/backstage-plugins-grafana/tree/main/plugins/grafana-backend",
+  "bugs": "https://github.com/marble-sh/backstage-plugins-grafana/issues",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "package.json": [
+        "package.json"
+      ]
+    }
+  }
+}

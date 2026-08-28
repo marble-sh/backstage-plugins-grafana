@@ -1,0 +1,139 @@
+name: Version Bump
+
+# Turns every merged pull request into a changeset automatically, so each
+# merge is tracked, versioned, and released without contributors having to
+# run `yarn changeset` by hand. See docs/versioning.md for the full policy.
+#
+# Bump level comes from PR labels (SemVer):
+#   semver:major or breaking-change  ->  major
+#   semver:minor                     ->  minor
+#   anything else                    ->  patch (the default)
+#
+# The changelog line is prefixed with a Keep a Changelog category derived
+# from the PR's type labels (bug -> Fixed, enhancement -> Added,
+# security -> Security, everything else -> Changed).
+#
+# If the PR already contains a manually written changeset, this workflow does
+# nothing — a hand-authored changeset always wins over the generated one.
+#
+# Security: this runs on pull_request_target so it also covers fork PRs, but
+# it never checks out or executes PR code. It only reads PR metadata (labels,
+# title, body, changed file paths) and writes a changeset file onto main.
+# Untrusted text (title/body) is passed via environment variables and never
+# interpolated into the script.
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write # push the generated changeset to main
+  pull-requests: read # read the PR's changed files
+  actions: write # dispatch the Release workflow after pushing
+
+# Serialize pushes to main from this workflow.
+concurrency:
+  group: version-bump
+  cancel-in-progress: false
+
+jobs:
+  changeset:
+    name: Generate changeset from PR labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only for merged PRs on the canonical repo, and never for the
+    # "Version Packages" PR (authored by github-actions[bot]) — versioning
+    # the version PR would loop forever.
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.repository == 'marble-sh/backstage-plugins-grafana' &&
+      github.event.pull_request.user.login != 'github-actions[bot]'
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Generate and push changeset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+
+          has_label() {
+            jq -e --arg l "$1" 'index($l) != null' <<<"$LABELS_JSON" >/dev/null
+          }
+
+          changed_files=$(gh api "repos/$REPO/pulls/$PR_NUMBER/files" \
+            --paginate --jq '.[].filename')
+
+          # A hand-authored changeset in the PR always wins.
+          if grep -q '^\.changeset/.*\.md$' <<<"$changed_files"; then
+            echo "PR #$PR_NUMBER already carries a changeset — nothing to do."
+            exit 0
+          fi
+
+          # Map changed files to publishable workspace packages.
+          packages=()
+          while IFS= read -r dir; do
+            pkg_json="plugins/$dir/package.json"
+            [ -f "$pkg_json" ] || continue
+            [ "$(jq -r '.private // false' "$pkg_json")" = "true" ] && continue
+            packages+=("$(jq -r '.name' "$pkg_json")")
+          done < <(sed -n 's#^plugins/\([^/]*\)/.*#\1#p' <<<"$changed_files" | sort -u)
+
+          if [ "${#packages[@]}" -eq 0 ]; then
+            echo "No publishable packages touched — no release needed."
+            exit 0
+          fi
+
+          # Bump level from labels; patch is the default (SemVer).
+          bump=patch
+          if has_label 'semver:minor'; then bump=minor; fi
+          if has_label 'semver:major' || has_label 'breaking-change'; then bump=major; fi
+
+          # Keep a Changelog category from type labels.
+          category=Changed
+          if has_label 'enhancement'; then category=Added; fi
+          if has_label 'bug'; then category=Fixed; fi
+          if has_label 'security'; then category=Security; fi
+
+          # Summary: a ```release-note``` block in the PR body wins over the
+          # PR title, so authors can write user-facing notes when the title
+          # is too terse.
+          summary=$(awk '/^```release-note[[:space:]]*$/{f=1;next} /^```[[:space:]]*$/{f=0} f' \
+            <<<"${PR_BODY:-}")
+          if [ -z "${summary//[[:space:]]/}" ]; then
+            summary="$PR_TITLE"
+          fi
+
+          file=".changeset/auto-pr-${PR_NUMBER}.md"
+          {
+            echo '---'
+            for p in "${packages[@]}"; do echo "'$p': $bump"; done
+            echo '---'
+            echo
+            printf '**%s:** %s ([#%s](https://github.com/%s/pull/%s))\n' \
+              "$category" "$summary" "$PR_NUMBER" "$REPO" "$PR_NUMBER"
+          } > "$file"
+
+          echo "::group::Generated $file"
+          cat "$file"
+          echo "::endgroup::"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$file"
+          git commit -m "chore: changeset for #${PR_NUMBER} (${bump})"
+          git pull --rebase origin main
+          git push origin main
+
+          # Pushes made with GITHUB_TOKEN do not trigger `on: push` workflows,
+          # so kick the Release workflow explicitly to refresh the
+          # "Version Packages" PR with this changeset.
+          gh workflow run release.yml --ref main

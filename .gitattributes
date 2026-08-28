@@ -1,0 +1,12 @@
+# Normalize line endings to LF on checkin.
+* text=auto eol=lf
+
+# Committed Yarn tooling is vendored binary — don't diff it or count it in
+# language stats.
+.yarn/releases/** binary linguist-vendored
+.yarn/plugins/** binary linguist-vendored
+
+# Lockfile and generated API reports: keep in the repo but mark as generated so
+# GitHub collapses them in diffs and excludes them from language stats.
+yarn.lock linguist-generated
+**/report.api.md linguist-generated

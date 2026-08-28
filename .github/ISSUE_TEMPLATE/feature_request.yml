@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an idea or enhancement for the Grafana plugins
+labels: ['enhancement']
+body:
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected package
+      options:
+        - '@marble-sh/backstage-plugin-grafana (frontend)'
+        - '@marble-sh/backstage-plugin-grafana-backend'
+        - '@marble-sh/backstage-plugin-grafana-common'
+        - '@marble-sh/backstage-plugin-grafana-node'
+        - '@marble-sh/backstage-plugin-catalog-backend-module-grafana'
+        - '@marble-sh/backstage-plugin-scaffolder-backend-module-grafana'
+        - 'New package / multiple'
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the use case and the pain today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see? Include Grafana API details if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

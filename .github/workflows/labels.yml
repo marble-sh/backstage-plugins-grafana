@@ -1,0 +1,40 @@
+name: Labels
+
+# Keep the repository's labels in sync with .github/labels.yml (the single
+# source of truth). Runs when that file changes on main, or on demand.
+#
+# Note: path-filtered push workflows may not fire on the very first push of a
+# new repository — run this manually from the Actions tab once after creation.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.yml
+      - .github/workflows/labels.yml
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Preview changes without applying them
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    name: Sync labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Sync labels from .github/labels.yml
+        uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d # v6.0.0
+        with:
+          yaml-file: .github/labels.yml
+          # Repo labels are made to match the file exactly (extras are removed).
+          skip-delete: false
+          dry-run: ${{ inputs.dry-run || false }}
