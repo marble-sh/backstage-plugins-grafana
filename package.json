@@ -1,6 +1,6 @@
 {
   "name": "@marble-sh/grafana-plugins",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Backstage plugins for integrating Grafana dashboards and alerts",
   "author": "Cassidy Marble",
