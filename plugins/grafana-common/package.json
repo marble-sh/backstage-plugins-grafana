@@ -1,6 +1,6 @@
 {
   "name": "@marble-sh/backstage-plugin-grafana-common",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Common functionality for the Grafana Backstage plugins (types, annotations, and API contracts)",
   "main": "src/index.ts",
   "types": "src/index.ts",
