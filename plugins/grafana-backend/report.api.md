@@ -74,6 +74,7 @@ export type GetDashboardsOptions = {
   instanceName?: string;
   tags?: string[];
   query?: string;
+  uid?: string;
   refresh?: boolean;
 };
 

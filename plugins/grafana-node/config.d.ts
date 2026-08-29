@@ -74,9 +74,15 @@ export interface Config {
       namespace?: string;
 
       /**
-       * The Grafana Cloud stack id. Used to derive the App Platform namespace
-       * (`stacks-<stackId>`) when `namespace` is not given. Only relevant for
-       * Grafana Cloud instances.
+       * The **numeric** Grafana Cloud stack id — not the stack slug/subdomain
+       * (`myorg` in `myorg.grafana.net`). Used to derive the App Platform
+       * namespace (`stacks-<stackId>`) when `namespace` is not given. Only
+       * relevant for Grafana Cloud instances; non-numeric values are rejected.
+       *
+       * Find it in the Grafana Cloud portal URL
+       * (`grafana.com/orgs/<org>/stacks/<id>`) or by calling
+       * `GET <baseUrl>/api/frontend/settings` with the service-account token —
+       * its `namespace` field is `stacks-<id>`.
        */
       stackId?: string;
 

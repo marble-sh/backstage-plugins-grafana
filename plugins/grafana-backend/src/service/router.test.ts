@@ -78,7 +78,7 @@ describe('createRouter', () => {
     });
   });
 
-  it('GET /instances/:name/dashboards parses tag, query and refresh', async () => {
+  it('GET /instances/:name/dashboards parses tag, query, uid and refresh', async () => {
     const getDashboards = jest
       .fn()
       .mockResolvedValue([
@@ -89,7 +89,7 @@ describe('createRouter', () => {
 
     const res = await request(app)
       .get('/instances/prod/dashboards')
-      .query('tag=x&tag=y&query=foo&refresh=true');
+      .query('tag=x&tag=y&query=foo&uid=aBc&refresh=true');
 
     expect(res.status).toBe(200);
     expect(res.body.items).toHaveLength(1);
@@ -97,6 +97,7 @@ describe('createRouter', () => {
       instanceName: 'prod',
       tags: ['x', 'y'],
       query: 'foo',
+      uid: 'aBc',
       refresh: true,
     });
   });

@@ -64,6 +64,7 @@ describe('GrafanaApiClient', () => {
       instanceName: 'prod',
       tags: ['x', 'y'],
       query: 'foo',
+      uid: 'aBc',
       refresh: true,
     });
 
@@ -71,6 +72,7 @@ describe('GrafanaApiClient', () => {
     expect(url.pathname).toBe('/api/grafana/instances/prod/dashboards');
     expect(url.searchParams.getAll('tag')).toEqual(['x', 'y']);
     expect(url.searchParams.get('query')).toBe('foo');
+    expect(url.searchParams.get('uid')).toBe('aBc');
     expect(url.searchParams.get('refresh')).toBe('true');
     expect(dashboards).toHaveLength(1);
   });

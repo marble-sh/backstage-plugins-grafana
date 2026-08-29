@@ -79,6 +79,7 @@ export async function createRouter(options: {
       instanceName: req.params.name,
       tags: toArray(req.query.tag),
       query: toString(req.query.query),
+      uid: toString(req.query.uid),
       refresh: toRefresh(req.query.refresh),
     });
     res.json({ items });
@@ -104,6 +105,7 @@ export async function createRouter(options: {
       instanceName: toString(req.query.instance),
       tags: toArray(req.query.tag),
       query: toString(req.query.query),
+      uid: toString(req.query.uid),
       refresh: toRefresh(req.query.refresh),
     });
     res.json({ items });

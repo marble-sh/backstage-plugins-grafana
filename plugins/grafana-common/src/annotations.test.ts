@@ -18,10 +18,12 @@ import { Entity } from '@backstage/catalog-model';
 import {
   GRAFANA_ANNOTATION_ALERT_LABEL_SELECTOR,
   GRAFANA_ANNOTATION_DASHBOARD_SELECTOR,
+  GRAFANA_ANNOTATION_DASHBOARD_UID,
   GRAFANA_ANNOTATION_INSTANCE,
   GRAFANA_ANNOTATION_TAG_SELECTOR,
   getAlertLabelSelector,
   getDashboardSelector,
+  getDashboardUid,
   getGrafanaInstanceName,
   getTagSelector,
   isAlertsAvailable,
@@ -42,6 +44,7 @@ describe('grafana annotations', () => {
     expect(GRAFANA_ANNOTATION_DASHBOARD_SELECTOR).toBe(
       'grafana/dashboard-selector',
     );
+    expect(GRAFANA_ANNOTATION_DASHBOARD_UID).toBe('grafana/dashboard-uid');
     expect(GRAFANA_ANNOTATION_TAG_SELECTOR).toBe('grafana/tag-selector');
     expect(GRAFANA_ANNOTATION_ALERT_LABEL_SELECTOR).toBe(
       'grafana/alert-label-selector',
@@ -63,11 +66,13 @@ describe('grafana annotations', () => {
     it('reads the dashboard, tag, and alert selectors', () => {
       const entity = entityWith({
         [GRAFANA_ANNOTATION_DASHBOARD_SELECTOR]: 'payments',
+        [GRAFANA_ANNOTATION_DASHBOARD_UID]: 'aBcD42',
         [GRAFANA_ANNOTATION_TAG_SELECTOR]: 'team-a',
         [GRAFANA_ANNOTATION_ALERT_LABEL_SELECTOR]: 'team=team-a,severity=high',
       });
 
       expect(getDashboardSelector(entity)).toBe('payments');
+      expect(getDashboardUid(entity)).toBe('aBcD42');
       expect(getTagSelector(entity)).toBe('team-a');
       expect(getAlertLabelSelector(entity)).toBe('team=team-a,severity=high');
     });
@@ -75,6 +80,7 @@ describe('grafana annotations', () => {
     it('returns undefined for selectors that are not set', () => {
       const entity = entityWith({});
       expect(getDashboardSelector(entity)).toBeUndefined();
+      expect(getDashboardUid(entity)).toBeUndefined();
       expect(getTagSelector(entity)).toBeUndefined();
       expect(getAlertLabelSelector(entity)).toBeUndefined();
     });
@@ -119,6 +125,7 @@ describe('grafana annotations', () => {
     it.each([
       [{ [GRAFANA_ANNOTATION_INSTANCE]: 'prod' }, true],
       [{ [GRAFANA_ANNOTATION_DASHBOARD_SELECTOR]: 'payments' }, true],
+      [{ [GRAFANA_ANNOTATION_DASHBOARD_UID]: 'abc' }, true],
       [{ [GRAFANA_ANNOTATION_TAG_SELECTOR]: 'team-a' }, true],
       [{ [GRAFANA_ANNOTATION_ALERT_LABEL_SELECTOR]: 'team=a' }, false],
       [{}, false],

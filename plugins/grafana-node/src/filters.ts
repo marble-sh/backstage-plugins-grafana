@@ -35,6 +35,8 @@ export type DashboardFilter = {
    * plain substring.
    */
   query?: string;
+  /** Only keep the dashboard with exactly this uid (case-sensitive). */
+  uid?: string;
 };
 
 /**
@@ -63,6 +65,9 @@ export function filterDashboards(
     .map(value => value.trim().toLocaleLowerCase('en-US'))
     .filter(Boolean);
   return dashboards.filter(dashboard => {
+    if (filter.uid && dashboard.uid !== filter.uid) {
+      return false;
+    }
     if (filter.tags?.length) {
       const hasAllTags = filter.tags.every(tag => dashboard.tags.includes(tag));
       if (!hasAllTags) {
