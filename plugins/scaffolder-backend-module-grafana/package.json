@@ -1,6 +1,6 @@
 {
   "name": "@marble-sh/backstage-plugin-scaffolder-backend-module-grafana",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Scaffolder backend module with actions for provisioning Grafana dashboards",
   "main": "src/index.ts",
   "types": "src/index.ts",

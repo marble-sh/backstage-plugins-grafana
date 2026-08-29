@@ -1,5 +1,18 @@
 # @marble-sh/backstage-plugin-grafana-node
 
+## 1.0.1
+
+### Patch Changes
+
+- 577eaca: Fixed: published manifests now carry real semver dependency ranges. Versions
+  0.2.0 and 1.0.0 were published via `changeset publish` (plain `npm publish`),
+  which skips Yarn's pack hooks and leaked the raw `workspace:^` and
+  `backstage:^` protocols into the registry manifests, making the packages
+  uninstallable outside this monorepo. Releases now publish `yarn pack` tarballs
+  through the npm CLI.
+- Updated dependencies [577eaca]
+  - @marble-sh/backstage-plugin-grafana-common@1.0.1
+
 ## 1.0.0
 
 ### Major Changes

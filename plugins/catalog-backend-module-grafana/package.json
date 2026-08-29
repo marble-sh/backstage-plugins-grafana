@@ -1,6 +1,6 @@
 {
   "name": "@marble-sh/backstage-plugin-catalog-backend-module-grafana",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Catalog backend module that discovers Grafana instances and dashboards as catalog entities",
   "main": "src/index.ts",
   "types": "src/index.ts",
