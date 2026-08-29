@@ -4,3 +4,4 @@ dist-types
 coverage
 .yarn
 CHANGELOG.md
+*.lock.yml
