@@ -1,6 +1,6 @@
 {
   "name": "@marble-sh/backstage-plugin-grafana-node",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Node-side library for the Grafana Backstage plugins: the Grafana HTTP client, instance configuration, and filtering helpers shared by the backend plugin and catalog module",
   "main": "src/index.ts",
   "types": "src/index.ts",

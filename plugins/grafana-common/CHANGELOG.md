@@ -1,5 +1,11 @@
 # @marble-sh/backstage-plugin-grafana-common
 
+## 1.0.0
+
+### Major Changes
+
+- b179a8f: Bumping to version 1.0.0, General Release!
+
 ## 0.2.0
 
 ### Minor Changes

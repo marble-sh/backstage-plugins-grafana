@@ -1,5 +1,17 @@
 # @marble-sh/backstage-plugin-catalog-backend-module-grafana
 
+## 1.0.0
+
+### Major Changes
+
+- b179a8f: Bumping to version 1.0.0, General Release!
+
+### Patch Changes
+
+- Updated dependencies [b179a8f]
+  - @marble-sh/backstage-plugin-grafana-common@1.0.0
+  - @marble-sh/backstage-plugin-grafana-node@1.0.0
+
 ## 0.2.0
 
 ### Minor Changes
