@@ -95,6 +95,7 @@ describe('buildGrafanaEntities', () => {
       [ANNOTATION_LOCATION]: 'grafana:prod',
       'grafana/instance': 'prod',
       'grafana/dashboard-selector': 'My Service',
+      'grafana/dashboard-uid': 'abc123',
     });
     expect(resource.metadata.links).toEqual([
       {

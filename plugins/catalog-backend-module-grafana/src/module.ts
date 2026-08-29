@@ -18,7 +18,10 @@ import {
   coreServices,
   createBackendModule,
 } from '@backstage/backend-plugin-api';
-import { catalogProcessingExtensionPoint } from '@backstage/plugin-catalog-node';
+import {
+  catalogProcessingExtensionPoint,
+  catalogServiceRef,
+} from '@backstage/plugin-catalog-node';
 import { GrafanaEntityProvider } from './GrafanaEntityProvider';
 
 /**
@@ -36,11 +39,18 @@ export const catalogModuleGrafana = createBackendModule({
         logger: coreServices.logger,
         config: coreServices.rootConfig,
         scheduler: coreServices.scheduler,
+        auth: coreServices.auth,
         catalog: catalogProcessingExtensionPoint,
+        catalogService: catalogServiceRef,
       },
-      async init({ logger, config, scheduler, catalog }) {
+      async init({ logger, config, scheduler, auth, catalog, catalogService }) {
         catalog.addEntityProvider(
-          GrafanaEntityProvider.fromConfig(config, { logger, scheduler }),
+          GrafanaEntityProvider.fromConfig(config, {
+            logger,
+            scheduler,
+            auth,
+            catalog: catalogService,
+          }),
         );
       },
     });

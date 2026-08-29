@@ -116,6 +116,22 @@ export interface Config {
        *    settings still work — this only affects the emitted entities.
        */
       emitTags?: boolean;
+
+      /**
+       * Whether a placeholder `Group` is created for `defaultOwner`, so the
+       * `spec.owner` relations of the generated entities do not dangle.
+       *
+       *  - `true` (default): while no other catalog source defines the owner
+       *    ref, a placeholder `Group` (`spec.type: virtual`, no members) is
+       *    emitted for it. A definition from any other source (for example a
+       *    hand-written catalog-info.yaml) always takes precedence — the
+       *    placeholder is only created when the ref does not exist at all.
+       *  - `false`: no placeholder; ensure `defaultOwner` exists, or the
+       *    generated entities' owner relations dangle. Also the switch for
+       *    handing an existing placeholder over to your own definition (see
+       *    the module README).
+       */
+      emitOwnerGroup?: boolean;
     };
   };
 }

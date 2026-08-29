@@ -16,8 +16,13 @@
 
 import { SchedulerServiceTaskRunner } from '@backstage/backend-plugin-api';
 import { mockServices } from '@backstage/backend-test-utils';
+import { Entity } from '@backstage/catalog-model';
 import { ConfigReader } from '@backstage/config';
-import { EntityProviderConnection } from '@backstage/plugin-catalog-node';
+import {
+  CatalogService,
+  EntityProviderConnection,
+} from '@backstage/plugin-catalog-node';
+import { catalogServiceMock } from '@backstage/plugin-catalog-node/testUtils';
 import { GrafanaClient } from '@marble-sh/backstage-plugin-grafana-node';
 import { GrafanaEntityProvider } from './GrafanaEntityProvider';
 import { GrafanaDiscoveryConfig } from './config';
@@ -39,6 +44,7 @@ const discovery: GrafanaDiscoveryConfig = {
   emitInstances: true,
   emitDashboards: true,
   emitTags: true,
+  emitOwnerGroup: true,
   filter: {},
 };
 
@@ -222,6 +228,185 @@ describe('GrafanaEntityProvider', () => {
     });
   });
 
+  describe('owner placeholder group', () => {
+    const ownerGroupFrom = (origin: string): Entity => ({
+      apiVersion: 'backstage.io/v1alpha1',
+      kind: 'Group',
+      metadata: {
+        name: 'grafana',
+        namespace: 'default',
+        annotations: {
+          'backstage.io/managed-by-location': origin,
+          'backstage.io/managed-by-origin-location': origin,
+        },
+      },
+      spec: { type: 'team', children: [] },
+    });
+
+    const makeProvider = (options: {
+      catalog?: CatalogService;
+      discovery?: GrafanaDiscoveryConfig;
+      logger?: ReturnType<typeof mockServices.logger.mock>;
+    }) =>
+      new GrafanaEntityProvider({
+        instances: [instanceConfig('prod')],
+        discovery: options.discovery ?? discovery,
+        logger: options.logger ?? mockServices.logger.mock(),
+        taskRunner: new ImmediateTaskRunner(),
+        clientFactory: () => fakeClient([]),
+        catalog: options.catalog,
+        auth: mockServices.auth(),
+      });
+
+    const connect = async (provider: GrafanaEntityProvider) => {
+      const connection: jest.Mocked<EntityProviderConnection> = {
+        applyMutation: jest.fn(),
+        refresh: jest.fn(),
+      };
+      await provider.connect(connection);
+      return connection;
+    };
+
+    const emittedGroups = (
+      connection: jest.Mocked<EntityProviderConnection>,
+      call = 0,
+    ) =>
+      (connection.applyMutation.mock.calls[call][0] as any).entities.filter(
+        (e: any) => e.entity.kind === 'Group',
+      );
+
+    it('creates a placeholder group when the owner is missing from the catalog', async () => {
+      const provider = makeProvider({ catalog: catalogServiceMock() });
+      const connection = await connect(provider);
+
+      const groups = emittedGroups(connection);
+      expect(groups).toHaveLength(1);
+      expect(groups[0].locationKey).toBe('grafana:owner-group');
+      expect(groups[0].entity).toMatchObject({
+        kind: 'Group',
+        metadata: {
+          name: 'grafana',
+          namespace: 'default',
+          annotations: {
+            'backstage.io/managed-by-location': 'grafana:owner-group',
+            'backstage.io/managed-by-origin-location': 'grafana:owner-group',
+          },
+        },
+        spec: { type: 'virtual', children: [] },
+      });
+    });
+
+    it('yields to an owner defined by another source', async () => {
+      const provider = makeProvider({
+        catalog: catalogServiceMock({
+          entities: [ownerGroupFrom('url:https://example.com/org.yaml')],
+        }),
+      });
+      const connection = await connect(provider);
+
+      expect(emittedGroups(connection)).toHaveLength(0);
+    });
+
+    it('keeps re-emitting a placeholder that is its own', async () => {
+      const provider = makeProvider({
+        catalog: catalogServiceMock({
+          entities: [ownerGroupFrom('grafana:owner-group')],
+        }),
+      });
+      const connection = await connect(provider);
+
+      expect(emittedGroups(connection)).toHaveLength(1);
+    });
+
+    it('emits nothing when emitOwnerGroup is disabled', async () => {
+      const getEntityByRef = jest.fn();
+      const provider = makeProvider({
+        catalog: {
+          getEntityByRef,
+        } as Partial<CatalogService> as CatalogService,
+        discovery: { ...discovery, emitOwnerGroup: false },
+      });
+      const connection = await connect(provider);
+
+      expect(emittedGroups(connection)).toHaveLength(0);
+      expect(getEntityByRef).not.toHaveBeenCalled();
+    });
+
+    it('emits nothing when the owner is not a group', async () => {
+      const getEntityByRef = jest.fn();
+      const provider = makeProvider({
+        catalog: {
+          getEntityByRef,
+        } as Partial<CatalogService> as CatalogService,
+        discovery: { ...discovery, defaultOwner: 'user:default/cassidy' },
+      });
+      const connection = await connect(provider);
+
+      expect(emittedGroups(connection)).toHaveLength(0);
+      expect(getEntityByRef).not.toHaveBeenCalled();
+    });
+
+    it('emits nothing and warns when defaultOwner is not a valid ref', async () => {
+      const logger = mockServices.logger.mock();
+      const provider = makeProvider({
+        catalog: catalogServiceMock(),
+        discovery: { ...discovery, defaultOwner: 'group:' },
+        logger,
+      });
+      const connection = await connect(provider);
+
+      expect(emittedGroups(connection)).toHaveLength(0);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('not a valid entity ref'),
+        expect.any(Error),
+      );
+    });
+
+    it('keeps the previous decision when the catalog lookup fails', async () => {
+      const getEntityByRef = jest.fn().mockResolvedValueOnce(undefined);
+      const logger = mockServices.logger.mock();
+      const provider = makeProvider({
+        catalog: {
+          getEntityByRef,
+        } as Partial<CatalogService> as CatalogService,
+        logger,
+      });
+      const connection = await connect(provider);
+      expect(emittedGroups(connection, 0)).toHaveLength(1);
+
+      getEntityByRef.mockRejectedValueOnce(new Error('catalog down'));
+      await provider.refresh();
+
+      // The previously emitted placeholder survives the failing lookup, so
+      // the full mutation does not delete-and-recreate it.
+      expect(emittedGroups(connection, 1)).toHaveLength(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('keeping the previously emitted placeholder'),
+        expect.any(Error),
+      );
+    });
+
+    it('emits no group at all when discovery produced no entities', async () => {
+      const getEntityByRef = jest.fn();
+      const provider = new GrafanaEntityProvider({
+        instances: [],
+        discovery,
+        logger: mockServices.logger.mock(),
+        taskRunner: new ImmediateTaskRunner(),
+        catalog: {
+          getEntityByRef,
+        } as Partial<CatalogService> as CatalogService,
+        auth: mockServices.auth(),
+      });
+      const connection = await connect(provider);
+
+      expect(
+        (connection.applyMutation.mock.calls[0][0] as any).entities,
+      ).toHaveLength(0);
+      expect(getEntityByRef).not.toHaveBeenCalled();
+    });
+  });
+
   describe('fromConfig', () => {
     const rootConfigWith = (catalog: object) =>
       new ConfigReader({
@@ -243,6 +428,8 @@ describe('GrafanaEntityProvider', () => {
       scheduler: mockServices.scheduler.mock({
         createScheduledTaskRunner: () => new ImmediateTaskRunner(),
       }),
+      catalog: catalogServiceMock(),
+      auth: mockServices.auth(),
     });
 
     it('throws when the allow-list names an unknown instance', () => {
@@ -284,7 +471,8 @@ describe('GrafanaEntityProvider', () => {
         const names = (
           connection.applyMutation.mock.calls[0][0] as any
         ).entities.map((e: any) => e.entity.metadata.name);
-        expect(names).toEqual(['grafana-instance-staging']);
+        // The placeholder owner group is emitted alongside the instance.
+        expect(names).toEqual(['grafana-instance-staging', 'grafana']);
       } finally {
         fetchSpy.mockRestore();
       }

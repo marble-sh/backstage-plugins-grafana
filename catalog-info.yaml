@@ -1,0 +1,30 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: backstage-plugins-grafana
+  title: Grafana plugins for Backstage
+  description: >-
+    Backstage plugin suite integrating Grafana dashboards and alerts: backend
+    REST API with scheduled refresh, frontend cards/tabs/page, catalog
+    discovery of instances and dashboards, and a scaffolder action — published
+    as the @marble-sh/backstage-plugin-grafana* packages.
+  annotations:
+    github.com/project-slug: marble-sh/backstage-plugins-grafana
+  tags:
+    - backstage-plugin
+    - grafana
+    - observability
+    - typescript
+  links:
+    - url: https://github.com/marble-sh/backstage-plugins-grafana
+      title: GitHub repository
+      icon: github
+    - url: https://www.npmjs.com/~marble-sh
+      title: Published packages on npm
+    - url: https://github.com/marble-sh/backstage-plugins-grafana/tree/main/docs
+      title: Documentation
+      icon: docs
+spec:
+  type: library
+  lifecycle: production
+  owner: user:marble-sh

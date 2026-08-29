@@ -22,6 +22,7 @@ import {
 } from '@backstage/catalog-model';
 import {
   GRAFANA_ANNOTATION_DASHBOARD_SELECTOR,
+  GRAFANA_ANNOTATION_DASHBOARD_UID,
   GRAFANA_ANNOTATION_INSTANCE,
   GrafanaDashboard,
 } from '@marble-sh/backstage-plugin-grafana-common';
@@ -159,6 +160,7 @@ export function buildGrafanaEntities(
           annotations: {
             ...commonAnnotations,
             [GRAFANA_ANNOTATION_DASHBOARD_SELECTOR]: dashboard.title,
+            [GRAFANA_ANNOTATION_DASHBOARD_UID]: dashboard.uid,
           },
           links: [{ url: dashboard.url, title: 'Open dashboard' }],
           ...(tags.length ? { tags } : {}),

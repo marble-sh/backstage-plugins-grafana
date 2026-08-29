@@ -44,6 +44,11 @@ export type GrafanaDiscoveryConfig = GrafanaEntityOptions & {
   instances?: string[];
   /** Dashboard filter applied during discovery. */
   filter: GrafanaDiscoveryFilter;
+  /**
+   * Whether a placeholder `Group` is created for `defaultOwner` when no such
+   * entity exists in the catalog from any other source.
+   */
+  emitOwnerGroup: boolean;
 };
 
 const DEFAULT_SCHEDULE: SchedulerServiceTaskScheduleDefinition = {
@@ -76,6 +81,7 @@ export function readGrafanaDiscoveryConfig(
     emitInstances: config?.getOptionalBoolean('emitInstances') ?? true,
     emitDashboards: config?.getOptionalBoolean('emitDashboards') ?? true,
     emitTags: config?.getOptionalBoolean('emitTags') ?? true,
+    emitOwnerGroup: config?.getOptionalBoolean('emitOwnerGroup') ?? true,
     instances: config?.getOptionalStringArray('instances'),
     filter: {
       tags: config?.getOptionalStringArray('filter.tags'),
