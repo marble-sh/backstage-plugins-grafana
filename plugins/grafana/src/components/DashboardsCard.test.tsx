@@ -33,6 +33,7 @@ const entity: Entity = {
       'grafana/instance': 'prod',
       'grafana/tag-selector': 'team-a, prod',
       'grafana/dashboard-selector': 'latency',
+      'grafana/dashboard-uid': 'aBc42',
     },
   },
   spec: {},
@@ -68,6 +69,7 @@ describe('DashboardsCard', () => {
       instanceName: 'prod',
       tags: ['team-a', 'prod'],
       query: 'latency',
+      uid: 'aBc42',
     });
   });
 

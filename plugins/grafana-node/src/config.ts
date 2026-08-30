@@ -54,6 +54,15 @@ const deriveNamespace = (options: {
     return options.namespace;
   }
   if (options.stackId) {
+    if (!/^\d+$/.test(options.stackId)) {
+      throw new InputError(
+        `Invalid grafana instance stackId '${options.stackId}': expected the ` +
+          `numeric Grafana Cloud stack id, not the stack slug/subdomain. Find ` +
+          `it in the Cloud portal URL (grafana.com/orgs/<org>/stacks/<id>) or ` +
+          `via GET <baseUrl>/api/frontend/settings, whose "namespace" field ` +
+          `is "stacks-<id>".`,
+      );
+    }
     return `stacks-${options.stackId}`;
   }
   return 'default';

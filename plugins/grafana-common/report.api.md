@@ -12,6 +12,9 @@ export const getAlertLabelSelector: (entity: Entity) => string | undefined;
 export const getDashboardSelector: (entity: Entity) => string | undefined;
 
 // @public
+export const getDashboardUid: (entity: Entity) => string | undefined;
+
+// @public
 export const getGrafanaInstanceName: (entity: Entity) => string | undefined;
 
 // @public
@@ -24,6 +27,9 @@ export const GRAFANA_ANNOTATION_ALERT_LABEL_SELECTOR =
 // @public
 export const GRAFANA_ANNOTATION_DASHBOARD_SELECTOR =
   'grafana/dashboard-selector';
+
+// @public
+export const GRAFANA_ANNOTATION_DASHBOARD_UID = 'grafana/dashboard-uid';
 
 // @public
 export const GRAFANA_ANNOTATION_INSTANCE = 'grafana/instance';

@@ -67,6 +67,23 @@ describe('readGrafanaInstances', () => {
     expect(instance.namespace).toBe('stacks-12345');
   });
 
+  it('throws on a non-numeric stackId such as the stack slug', () => {
+    expect(() =>
+      read({
+        grafana: {
+          instances: [
+            {
+              name: 'cloud',
+              baseUrl: 'https://myorg.grafana.net',
+              token: 'abc',
+              stackId: 'myorg',
+            },
+          ],
+        },
+      }),
+    ).toThrow(/stackId 'myorg'.*numeric/);
+  });
+
   it('prefers an explicit namespace over stackId', () => {
     const [instance] = read({
       grafana: {

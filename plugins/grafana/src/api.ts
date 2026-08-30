@@ -41,6 +41,8 @@ export type ListDashboardsRequest = {
   tags?: string[];
   /** Comma-separated title substrings; dashboards matching any are returned. */
   query?: string;
+  /** Only return the dashboard with exactly this uid (case-sensitive). */
+  uid?: string;
   /** Force a live fetch, bypassing the backend cache. */
   refresh?: boolean;
 };
@@ -121,6 +123,9 @@ export class GrafanaApiClient implements GrafanaApi {
     }
     if (request.query) {
       params.set('query', request.query);
+    }
+    if (request.uid) {
+      params.set('uid', request.uid);
     }
     if (request.refresh) {
       params.set('refresh', 'true');

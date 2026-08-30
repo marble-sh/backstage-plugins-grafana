@@ -17,6 +17,7 @@ export type AlertFilter = {
 export type DashboardFilter = {
   tags?: string[];
   query?: string;
+  uid?: string;
 };
 
 // @public

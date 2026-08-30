@@ -35,6 +35,15 @@ export const GRAFANA_ANNOTATION_DASHBOARD_SELECTOR =
   'grafana/dashboard-selector';
 
 /**
+ * Selects a single dashboard by its Grafana uid (exact, case-sensitive match).
+ * Written by catalog discovery onto the `Resource` it emits per dashboard, so
+ * that the entity shows exactly its own dashboard; it can also be set by hand.
+ *
+ * @public
+ */
+export const GRAFANA_ANNOTATION_DASHBOARD_UID = 'grafana/dashboard-uid';
+
+/**
  * A comma-separated list of dashboard tags used to select the dashboards shown
  * for an entity.
  *
@@ -73,6 +82,14 @@ export const getDashboardSelector = (entity: Entity): string | undefined =>
   read(entity, GRAFANA_ANNOTATION_DASHBOARD_SELECTOR);
 
 /**
+ * Returns the dashboard uid selector for an entity, if any.
+ *
+ * @public
+ */
+export const getDashboardUid = (entity: Entity): string | undefined =>
+  read(entity, GRAFANA_ANNOTATION_DASHBOARD_UID);
+
+/**
  * Returns the dashboard tag selector for an entity, if any.
  *
  * @public
@@ -98,6 +115,7 @@ export const isDashboardsAvailable = (entity: Entity): boolean =>
   Boolean(
     getGrafanaInstanceName(entity) ||
       getDashboardSelector(entity) ||
+      getDashboardUid(entity) ||
       getTagSelector(entity),
   );
 

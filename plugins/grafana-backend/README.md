@@ -95,7 +95,7 @@ grafana:
 | `token`          | yes      | Service-account token used as a Bearer token. Read-only (Viewer) permissions are enough. Marked secret. |
 | `title`          | no       | Human-readable title. Defaults to `name`.                                                               |
 | `namespace`      | no       | App Platform namespace. Defaults to `default` (self-hosted) or `stacks-<stackId>` (cloud).              |
-| `stackId`        | no       | Grafana Cloud stack id, used to derive the namespace.                                                   |
+| `stackId`        | no       | **Numeric** Grafana Cloud stack id (not the stack slug), used to derive the namespace (see below).      |
 | `apis`           | no       | Override or disable the API used per data type (see below).                                             |
 | `resolveFolders` | no       | `false` skips the `/api/folders` folder lookup (see below). Defaults to `true`.                         |
 
@@ -166,6 +166,21 @@ Grafana's App Platform APIs are namespaced:
 - Self-hosted, other organizations → `org-<id>` (set `namespace` explicitly)
 - Grafana Cloud → `stacks-<stackId>` (set `stackId`, or `namespace` directly)
 
+`stackId` is the **numeric** stack id, not the stack slug — for a stack at
+`myorg.grafana.net`, `myorg` is the slug, not the id. A non-numeric `stackId`
+is rejected at startup. Two ways to find the id:
+
+- In the Grafana Cloud portal, open the stack; the URL is
+  `grafana.com/orgs/<org>/stacks/<id>`.
+- Ask the instance itself, using the same service-account token this plugin
+  uses:
+
+  ```bash
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    https://<slug>.grafana.net/api/frontend/settings | jq -r .namespace
+  # → "stacks-1216502"  — the number is the stackId
+  ```
+
 ## REST API
 
 All routes are mounted under `/api/grafana` and (except `/health`) require a
@@ -187,6 +202,8 @@ valid Backstage credential.
 - `tag` — repeatable; only dashboards carrying **all** given tags are returned.
 - `query` — comma-separated, case-insensitive title substrings; dashboards
   matching **any** value are returned.
+- `uid` — only the dashboard with exactly this uid (case-sensitive) is
+  returned; combines with the other filters.
 - `labelSelector` — `key=value,key2=value2`; only alerts matching **all** pairs.
 - `instance` — (on `/dashboards` and `/alerts`) restrict to a single instance.
 - `refresh` — `true` or `1` (or the bare flag) to bypass the store and read

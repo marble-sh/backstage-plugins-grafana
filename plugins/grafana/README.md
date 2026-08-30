@@ -27,12 +27,13 @@ carry a relevant Grafana annotation, so they never appear on unrelated entities.
 
 ## Entity annotations
 
-| Annotation                     | Used by             | Meaning                                       |
-| ------------------------------ | ------------------- | --------------------------------------------- |
-| `grafana/instance`             | dashboards + alerts | Which configured Grafana instance to query.   |
-| `grafana/tag-selector`         | dashboards          | Comma-separated dashboard tags to filter by.  |
-| `grafana/dashboard-selector`   | dashboards          | Comma-separated title substrings (any match). |
-| `grafana/alert-label-selector` | alerts              | `key=value,...` alert label matchers.         |
+| Annotation                     | Used by             | Meaning                                                                                      |
+| ------------------------------ | ------------------- | -------------------------------------------------------------------------------------------- |
+| `grafana/instance`             | dashboards + alerts | Which configured Grafana instance to query.                                                  |
+| `grafana/tag-selector`         | dashboards          | Comma-separated dashboard tags to filter by.                                                 |
+| `grafana/dashboard-selector`   | dashboards          | Comma-separated title substrings (any match).                                                |
+| `grafana/dashboard-uid`        | dashboards          | A single dashboard uid (exact match). Set by catalog discovery on its dashboard `Resource`s. |
+| `grafana/alert-label-selector` | alerts              | `key=value,...` alert label matchers.                                                        |
 
 Example:
 

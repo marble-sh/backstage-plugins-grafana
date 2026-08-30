@@ -51,6 +51,17 @@ describe('filterDashboards', () => {
     expect(filterDashboards(dashboards)).toHaveLength(3);
   });
 
+  it('matches a uid exactly and case-sensitively', () => {
+    expect(filterDashboards(dashboards, { uid: 'a' }).map(d => d.uid)).toEqual([
+      'a',
+    ]);
+    expect(filterDashboards(dashboards, { uid: 'A' })).toHaveLength(0);
+    // The uid combines with the other filters rather than replacing them.
+    expect(
+      filterDashboards(dashboards, { uid: 'a', tags: ['y'] }),
+    ).toHaveLength(0);
+  });
+
   it('requires all requested tags to be present', () => {
     expect(
       filterDashboards(dashboards, { tags: ['x'] }).map(d => d.uid),

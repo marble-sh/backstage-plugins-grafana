@@ -24,6 +24,7 @@ import { useApi } from '@backstage/core-plugin-api';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import {
   getDashboardSelector,
+  getDashboardUid,
   getGrafanaInstanceName,
   getTagSelector,
   parseTagSelector,
@@ -38,8 +39,8 @@ import { grafanaApiRef } from '../api';
 
 /**
  * An entity card that lists the Grafana dashboards for the current entity,
- * selected via the `grafana/instance`, `grafana/tag-selector`, and
- * `grafana/dashboard-selector` annotations.
+ * selected via the `grafana/instance`, `grafana/tag-selector`,
+ * `grafana/dashboard-selector`, and `grafana/dashboard-uid` annotations.
  *
  * @public
  */
@@ -50,10 +51,11 @@ export const DashboardsCard = () => {
   const instanceName = getGrafanaInstanceName(entity);
   const tags = parseTagSelector(getTagSelector(entity));
   const query = getDashboardSelector(entity);
+  const uid = getDashboardUid(entity);
 
   const { value, loading, error } = useAsync(
-    () => api.listDashboards({ instanceName, tags, query }),
-    [instanceName, tags.join(','), query],
+    () => api.listDashboards({ instanceName, tags, query, uid }),
+    [instanceName, tags.join(','), query, uid],
   );
 
   const dashboards = value ?? [];

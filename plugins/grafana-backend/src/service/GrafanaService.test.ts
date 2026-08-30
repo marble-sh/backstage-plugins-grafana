@@ -177,6 +177,17 @@ describe('DefaultGrafanaService', () => {
     expect(dashboards.map(d => d.uid)).toEqual(['a', 'b']);
   });
 
+  it('selects a single dashboard by exact uid', async () => {
+    const client = new FakeClient([dash('a'), dash('b')]);
+    const service = makeService([{ config: configFor('prod'), client }]);
+
+    const dashboards = await service.getDashboards({
+      instanceName: 'prod',
+      uid: 'b',
+    });
+    expect(dashboards.map(d => d.uid)).toEqual(['b']);
+  });
+
   it('applies label selectors to stored alerts', async () => {
     const client = new FakeClient(
       [],

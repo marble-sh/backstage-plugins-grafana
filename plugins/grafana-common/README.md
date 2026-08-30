@@ -16,6 +16,7 @@ It provides:
 | ------------------------------ | ------------------------ | ------------------------------------------------------------------ |
 | `grafana/instance`             | `getGrafanaInstanceName` | Which configured Grafana instance the entity belongs to.           |
 | `grafana/dashboard-selector`   | `getDashboardSelector`   | Comma-separated title substrings; any match selects the dashboard. |
+| `grafana/dashboard-uid`        | `getDashboardUid`        | A single dashboard uid (exact, case-sensitive match).              |
 | `grafana/tag-selector`         | `getTagSelector`         | A comma-separated list of dashboard tags.                          |
 | `grafana/alert-label-selector` | `getAlertLabelSelector`  | A `key=value,...` list of alert label matchers.                    |
 

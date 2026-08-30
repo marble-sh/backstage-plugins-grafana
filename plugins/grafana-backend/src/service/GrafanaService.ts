@@ -51,6 +51,8 @@ export type GetDashboardsOptions = {
   tags?: string[];
   /** Comma-separated title substrings; dashboards matching any are returned. */
   query?: string;
+  /** Only return the dashboard with exactly this uid (case-sensitive). */
+  uid?: string;
   /** Force a live fetch, bypassing the store. */
   refresh?: boolean;
 };
@@ -138,6 +140,7 @@ export class DefaultGrafanaService implements GrafanaService {
         ...filterDashboards(snapshot.dashboards, {
           tags: options.tags,
           query: options.query,
+          uid: options.uid,
         }),
       );
     }
