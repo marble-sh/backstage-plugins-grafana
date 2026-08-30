@@ -19,6 +19,7 @@ import {
   catalogProcessingExtensionPoint,
   EntityProvider,
 } from '@backstage/plugin-catalog-node';
+import { catalogServiceMock } from '@backstage/plugin-catalog-node/testUtils';
 import { catalogModuleGrafana } from './module';
 
 describe('catalogModuleGrafana', () => {
@@ -34,6 +35,7 @@ describe('catalogModuleGrafana', () => {
       extensionPoints: [[catalogProcessingExtensionPoint, extensionPoint]],
       features: [
         catalogModuleGrafana,
+        catalogServiceMock.factory(),
         mockServices.rootConfig.factory({
           data: {
             grafana: {

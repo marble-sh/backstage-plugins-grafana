@@ -29,6 +29,7 @@ describe('readGrafanaDiscoveryConfig', () => {
     expect(result.emitInstances).toBe(true);
     expect(result.emitDashboards).toBe(true);
     expect(result.emitTags).toBe(true);
+    expect(result.emitOwnerGroup).toBe(true);
     expect(result.instances).toBeUndefined();
     expect(result.filter).toEqual({ tags: undefined, query: undefined });
     expect(result.schedule.frequency).toEqual({ minutes: 30 });
@@ -60,6 +61,7 @@ describe('readGrafanaDiscoveryConfig', () => {
           system: 'observability',
           emitInstances: false,
           emitDashboards: true,
+          emitOwnerGroup: false,
         },
       },
     });
@@ -67,6 +69,7 @@ describe('readGrafanaDiscoveryConfig', () => {
     expect(result.system).toBe('observability');
     expect(result.emitInstances).toBe(false);
     expect(result.emitDashboards).toBe(true);
+    expect(result.emitOwnerGroup).toBe(false);
   });
 
   it('reads a custom schedule', () => {
