@@ -15,3 +15,33 @@
  */
 
 import '@testing-library/jest-dom';
+
+// TODO: Remove the below code when backstage has been updated to mui v5.
+
+// eslint-disable-next-line no-console
+const realConsoleError = console.error.bind(console);
+
+// Material UI's @material-ui/core@v4 uses deprecated functions.
+// As these are transitive dependencies to backstage itself there's nothing I can do here.
+const muiErrors = [
+  'findDOMNode is deprecated and will be removed',
+  'Support for defaultProps will be removed',
+];
+
+const checkArg = (arg: any) => {
+  if (typeof arg === 'string') {
+    for (const error of muiErrors) {
+      if (arg.includes(error)) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+jest.spyOn(console, 'error').mockImplementation((...args: any[]) => {
+  if (args.some((arg: any) => checkArg(arg))) {
+    return;
+  }
+  realConsoleError(...args);
+});

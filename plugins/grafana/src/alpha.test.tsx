@@ -70,6 +70,8 @@ const mockApi: GrafanaApi = {
   listInstances: async () => instances,
   listDashboards: async () => dashboards,
   listAlerts: async () => alerts,
+  listPanels: async () => [],
+  getPanelData: async () => ({ panelId: 1, series: [] }),
 };
 
 const annotatedEntity: Entity = {
@@ -170,7 +172,7 @@ describe('grafana plugin (new frontend system)', () => {
     expect(await screen.findByText('High latency')).toBeInTheDocument();
   });
 
-  it('renders the entity tab contents through the extensions', async () => {
+  it('renders Service Overview in the entity tab contents through the extensions', async () => {
     renderInTestApp(
       <EntityProvider entity={annotatedEntity}>
         {createExtensionTester(entityGrafanaDashboardsContent).reactElement()}
@@ -178,7 +180,9 @@ describe('grafana plugin (new frontend system)', () => {
       { apis: [[grafanaApiRef, mockApi]] },
     );
     expect(await screen.findByText('Service Overview')).toBeInTheDocument();
+  });
 
+  it('renders High Latency in the entity tab contents through the extensions', async () => {
     renderInTestApp(
       <EntityProvider entity={annotatedEntity}>
         {createExtensionTester(entityGrafanaAlertsContent).reactElement()}

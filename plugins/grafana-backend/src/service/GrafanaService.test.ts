@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
+import { CacheService } from '@backstage/backend-plugin-api';
 import { mockServices } from '@backstage/backend-test-utils';
+import { NotFoundError } from '@backstage/errors';
 import {
   GrafanaAlert,
   GrafanaDashboard,
+  GrafanaPanel,
+  GrafanaPanelData,
 } from '@marble-sh/backstage-plugin-grafana-common';
 import {
   GrafanaClient,
@@ -327,5 +331,186 @@ describe('DefaultGrafanaService', () => {
 
     expect(store.map.has('prod')).toBe(false);
     expect(store.map.get('staging')?.dashboards).toHaveLength(1);
+  });
+
+  describe('panels', () => {
+    class PanelClient extends FakeClient {
+      getPanelsCalls = 0;
+      getPanelDataCalls: Array<{
+        uid: string;
+        panelId: number;
+        options?: { from?: string; to?: string };
+      }> = [];
+      async getPanels(uid: string): Promise<GrafanaPanel[]> {
+        this.getPanelsCalls += 1;
+        return [
+          {
+            id: 1,
+            title: 'Requests',
+            type: 'timeseries',
+            kind: 'timeseries',
+            dashboardUid: uid,
+            instanceName: 'prod',
+          },
+        ];
+      }
+      async getPanelData(
+        uid: string,
+        panelId: number,
+        options?: { from?: string; to?: string },
+      ): Promise<GrafanaPanelData> {
+        this.getPanelDataCalls.push({ uid, panelId, options });
+        return {
+          panelId,
+          series: [{ name: 's', points: [{ timeMs: 1, value: 2 }] }],
+        };
+      }
+    }
+
+    class MemoryCache {
+      readonly map = new Map<string, unknown>();
+      readonly ttls: Array<{ key: string; ttl?: unknown }> = [];
+      async get(key: string) {
+        return this.map.get(key);
+      }
+      async set(key: string, value: unknown, options?: { ttl?: unknown }) {
+        this.map.set(key, value);
+        this.ttls.push({ key, ttl: options?.ttl });
+      }
+      async delete(key: string) {
+        this.map.delete(key);
+      }
+      withOptions() {
+        return this;
+      }
+    }
+
+    const makePanelService = (
+      client: PanelClient,
+      cache?: MemoryCache,
+      panelDataCacheTtl?: { seconds: number },
+    ) =>
+      new DefaultGrafanaService({
+        instances: [{ config: configFor('prod'), client }],
+        store: new MemoryStore(),
+        logger: mockServices.logger.mock(),
+        cache: cache as unknown as CacheService | undefined,
+        panelDataCacheTtl,
+      });
+
+    it('lists panels through the client', async () => {
+      const client = new PanelClient([]);
+      const service = makePanelService(client);
+
+      const panels = await service.getPanels({
+        instanceName: 'prod',
+        dashboardUid: 'dash-1',
+      });
+
+      expect(panels).toEqual([expect.objectContaining({ id: 1 })]);
+      expect(client.getPanelsCalls).toBe(1);
+    });
+
+    it('caches panels and panel data when a cache is available', async () => {
+      const client = new PanelClient([]);
+      const cache = new MemoryCache();
+      const service = makePanelService(client, cache, { seconds: 42 });
+
+      await service.getPanels({ instanceName: 'prod', dashboardUid: 'd' });
+      await service.getPanels({ instanceName: 'prod', dashboardUid: 'd' });
+      expect(client.getPanelsCalls).toBe(1);
+
+      const options = {
+        instanceName: 'prod',
+        dashboardUid: 'd',
+        panelId: 1,
+        from: 'now-1h',
+        to: 'now',
+      };
+      await service.getPanelData(options);
+      await service.getPanelData(options);
+      expect(client.getPanelDataCalls).toHaveLength(1);
+      expect(cache.ttls.every(entry => entry.ttl === 42_000)).toBe(true);
+    });
+
+    it('treats different ranges and panels as distinct cache entries', async () => {
+      const client = new PanelClient([]);
+      const cache = new MemoryCache();
+      const service = makePanelService(client, cache);
+
+      const base = { instanceName: 'prod', dashboardUid: 'd', panelId: 1 };
+      await service.getPanelData({ ...base, from: 'now-1h', to: 'now' });
+      await service.getPanelData({ ...base, from: 'now-6h', to: 'now' });
+      await service.getPanelData({
+        ...base,
+        panelId: 2,
+        from: 'now-1h',
+        to: 'now',
+      });
+
+      expect(client.getPanelDataCalls).toHaveLength(3);
+    });
+
+    it('passes the range through to the client', async () => {
+      const client = new PanelClient([]);
+      const service = makePanelService(client);
+
+      await service.getPanelData({
+        instanceName: 'prod',
+        dashboardUid: 'd',
+        panelId: 7,
+        from: 'now-24h',
+        to: 'now-1h',
+      });
+
+      expect(client.getPanelDataCalls).toEqual([
+        { uid: 'd', panelId: 7, options: { from: 'now-24h', to: 'now-1h' } },
+      ]);
+    });
+
+    it('works without a cache, calling the client every time', async () => {
+      const client = new PanelClient([]);
+      const service = makePanelService(client);
+
+      await service.getPanels({ instanceName: 'prod', dashboardUid: 'd' });
+      await service.getPanels({ instanceName: 'prod', dashboardUid: 'd' });
+
+      expect(client.getPanelsCalls).toBe(2);
+    });
+
+    it('throws NotFoundError for an unknown instance', async () => {
+      const service = makePanelService(new PanelClient([]));
+
+      await expect(
+        service.getPanels({ instanceName: 'nope', dashboardUid: 'd' }),
+      ).rejects.toThrow(NotFoundError);
+      await expect(
+        service.getPanelData({
+          instanceName: 'nope',
+          dashboardUid: 'd',
+          panelId: 1,
+        }),
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('throws NotFoundError when the client has no panel support', async () => {
+      const client = new FakeClient([]);
+      const service = new DefaultGrafanaService({
+        instances: [{ config: configFor('prod'), client }],
+        store: new MemoryStore(),
+        logger: mockServices.logger.mock(),
+      });
+
+      await expect(
+        service.getPanels({ instanceName: 'prod', dashboardUid: 'd' }),
+      ).rejects.toThrow(/does not support panel/);
+      await expect(
+        service.getPanelData({
+          instanceName: 'prod',
+          dashboardUid: 'd',
+          panelId: 1,
+        }),
+      ).rejects.toThrow(/does not support panel/);
+    });
   });
 });

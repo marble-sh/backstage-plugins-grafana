@@ -63,6 +63,8 @@ const mockApi: GrafanaApi = {
   listInstances: async () => instances,
   listDashboards: async () => dashboards,
   listAlerts: async () => alerts,
+  listPanels: async () => [],
+  getPanelData: async () => ({ panelId: 1, series: [] }),
 };
 
 const annotatedEntity: Entity = {

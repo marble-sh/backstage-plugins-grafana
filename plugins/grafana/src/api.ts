@@ -21,12 +21,16 @@ import {
 } from '@backstage/core-plugin-api';
 import { ResponseError } from '@backstage/errors';
 import {
+  GetPanelDataResponse,
   GrafanaAlert,
   GrafanaDashboard,
   GrafanaInstanceInfo,
+  GrafanaPanel,
+  GrafanaPanelData,
   ListAlertsResponse,
   ListDashboardsResponse,
   ListInstancesResponse,
+  ListPanelsResponse,
 } from '@marble-sh/backstage-plugin-grafana-common';
 
 /**
@@ -62,6 +66,36 @@ export type ListAlertsRequest = {
 };
 
 /**
+ * Options for listing the panels of a dashboard through the frontend API.
+ *
+ * @public
+ */
+export type ListPanelsRequest = {
+  /** The instance the dashboard lives on. */
+  instanceName: string;
+  /** The uid of the dashboard whose panels are listed. */
+  dashboardUid: string;
+};
+
+/**
+ * Options for querying the data of a single panel through the frontend API.
+ *
+ * @public
+ */
+export type GetPanelDataRequest = {
+  /** The instance the dashboard lives on. */
+  instanceName: string;
+  /** The uid of the dashboard containing the panel. */
+  dashboardUid: string;
+  /** The id of the panel to query. */
+  panelId: number;
+  /** Range start: `now`, `now-<n><s|m|h|d|w>`, or epoch ms. Defaults to `now-6h`. */
+  from?: string;
+  /** Range end, same forms as `from`. Defaults to `now`. */
+  to?: string;
+};
+
+/**
  * A client for the Grafana backend REST API.
  *
  * @public
@@ -73,6 +107,10 @@ export interface GrafanaApi {
   listDashboards(request?: ListDashboardsRequest): Promise<GrafanaDashboard[]>;
   /** Lists alerts for one or all instances. */
   listAlerts(request?: ListAlertsRequest): Promise<GrafanaAlert[]>;
+  /** Lists the panels of a single dashboard. */
+  listPanels(request: ListPanelsRequest): Promise<GrafanaPanel[]>;
+  /** Queries the data of a single panel over a time range. */
+  getPanelData(request: GetPanelDataRequest): Promise<GrafanaPanelData>;
 }
 
 /**
@@ -151,6 +189,35 @@ export class GrafanaApiClient implements GrafanaApi {
     }
     const body = await this.get<ListAlertsResponse>(path, params);
     return body.items;
+  }
+
+  /** {@inheritDoc GrafanaApi.listPanels} */
+  async listPanels(request: ListPanelsRequest): Promise<GrafanaPanel[]> {
+    const body = await this.get<ListPanelsResponse>(
+      `/instances/${encodeURIComponent(
+        request.instanceName,
+      )}/dashboards/${encodeURIComponent(request.dashboardUid)}/panels`,
+    );
+    return body.items;
+  }
+
+  /** {@inheritDoc GrafanaApi.getPanelData} */
+  async getPanelData(request: GetPanelDataRequest): Promise<GrafanaPanelData> {
+    const params = new URLSearchParams();
+    if (request.from) {
+      params.set('from', request.from);
+    }
+    if (request.to) {
+      params.set('to', request.to);
+    }
+    return await this.get<GetPanelDataResponse>(
+      `/instances/${encodeURIComponent(
+        request.instanceName,
+      )}/dashboards/${encodeURIComponent(request.dashboardUid)}/panels/${
+        request.panelId
+      }/data`,
+      params,
+    );
   }
 
   private async get<T>(path: string, params?: URLSearchParams): Promise<T> {

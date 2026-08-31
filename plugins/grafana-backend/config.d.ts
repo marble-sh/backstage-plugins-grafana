@@ -70,6 +70,27 @@ export interface Config {
     fetchOnDemand?: boolean;
 
     /**
+     * Whether the panel routes are served.
+     *
+     *  - `true` (default): `GET …/dashboards/:uid/panels` and
+     *    `GET …/panels/:panelId/data` read live from Grafana (the dashboard
+     *    model and the datasource query API), briefly cached per
+     *    `panelDataCacheTtl`.
+     *  - `false`: both routes respond `403`. Set this together with
+     *    `allowOnDemandRefresh: false` and `fetchOnDemand: false` when
+     *    Grafana traffic must be strictly schedule-only — panel data cannot
+     *    be served from the snapshot store.
+     */
+    allowPanelQueries?: boolean;
+
+    /**
+     * Time-to-live for cached panel listings and panel data. Short by design:
+     * it exists to absorb bursts (opening a dashboard queries every panel at
+     * once), not to make graphs stale. Defaults to 30 seconds.
+     */
+    panelDataCacheTtl?: HumanDuration;
+
+    /**
      * Background refresh schedule. When set, the backend periodically refreshes
      * every instance's dashboards and alerts into the configured store. Omit to
      * disable scheduled refresh (data is then fetched lazily on request).

@@ -110,8 +110,84 @@ describe('GrafanaApiClient', () => {
     expect(url.searchParams.get('refresh')).toBe('true');
   });
 
+  it('lists the panels of a dashboard', async () => {
+    const panel = {
+      id: 1,
+      title: 'Requests',
+      type: 'timeseries',
+      kind: 'timeseries',
+      dashboardUid: 'd1',
+      instanceName: 'prod',
+    };
+    const { client, fetchMock } = setup({ items: [panel] });
+
+    const panels = await client.listPanels({
+      instanceName: 'prod',
+      dashboardUid: 'd1',
+    });
+
+    expect(calledUrl(fetchMock).pathname).toBe(
+      '/api/grafana/instances/prod/dashboards/d1/panels',
+    );
+    expect(panels).toEqual([panel]);
+  });
+
+  it('fetches panel data with a time range', async () => {
+    const data = { panelId: 3, series: [] };
+    const { client, fetchMock } = setup(data);
+
+    const result = await client.getPanelData({
+      instanceName: 'prod',
+      dashboardUid: 'd1',
+      panelId: 3,
+      from: 'now-1h',
+      to: 'now',
+    });
+
+    const url = calledUrl(fetchMock);
+    expect(url.pathname).toBe(
+      '/api/grafana/instances/prod/dashboards/d1/panels/3/data',
+    );
+    expect(url.searchParams.get('from')).toBe('now-1h');
+    expect(url.searchParams.get('to')).toBe('now');
+    expect(result).toEqual(data);
+  });
+
+  it('omits absent range parameters from panel data requests', async () => {
+    const { client, fetchMock } = setup({ panelId: 3, series: [] });
+
+    await client.getPanelData({
+      instanceName: 'prod',
+      dashboardUid: 'd1',
+      panelId: 3,
+    });
+
+    const url = calledUrl(fetchMock);
+    expect([...url.searchParams.keys()]).toEqual([]);
+  });
+
+  it('encodes instance and dashboard identifiers in panel paths', async () => {
+    const { client, fetchMock } = setup({ items: [] });
+
+    await client.listPanels({
+      instanceName: 'my prod',
+      dashboardUid: 'd/1',
+    });
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      '/instances/my%20prod/dashboards/d%2F1/panels',
+    );
+  });
+
   it('throws on a non-2xx response', async () => {
     const { client } = setup({ error: 'boom' }, 500);
     await expect(client.listInstances()).rejects.toThrow();
+    await expect(
+      client.getPanelData({
+        instanceName: 'prod',
+        dashboardUid: 'd1',
+        panelId: 1,
+      }),
+    ).rejects.toThrow();
   });
 });

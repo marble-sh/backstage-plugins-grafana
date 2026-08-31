@@ -66,6 +66,13 @@ export type GrafanaAlertState =
   | 'unknown';
 
 /**
+ * The evaluation health of a Grafana alert rule.
+ *
+ * @public
+ */
+export type GrafanaAlertHealth = 'ok' | 'error' | 'nodata' | 'unknown';
+
+/**
  * A Grafana alert rule together with its current state.
  *
  * @public
@@ -83,6 +90,95 @@ export type GrafanaAlert = {
   folderTitle?: string;
   /** The name of the instance this alert was read from. */
   instanceName: string;
+  /** The alert rule uid, when the source API provides one. */
+  uid?: string;
+  /** The evaluation health of the rule. */
+  health?: GrafanaAlertHealth;
+  /** The rule's `summary` annotation, if any. */
+  summary?: string;
+  /** ISO-8601 timestamp of when the rule became active, when it is. */
+  activeAt?: string;
+  /** The number of currently active (pending or firing) alert instances. */
+  activeCount?: number;
+  /** The uid of the dashboard the rule is linked to, if any. */
+  dashboardUid?: string;
+  /** The id of the panel the rule is linked to, if any. */
+  panelId?: number;
+};
+
+/**
+ * How a Grafana panel is rendered by the frontend.
+ *
+ * - `timeseries`: rendered as a chart (Grafana `timeseries` and legacy `graph`
+ *   panels).
+ * - `stat`: rendered as a single-value tile (Grafana `stat`, `gauge`, and
+ *   legacy `singlestat` panels).
+ * - `unsupported`: not rendered; shown as a link into Grafana.
+ *
+ * @public
+ */
+export type GrafanaPanelKind = 'timeseries' | 'stat' | 'unsupported';
+
+/**
+ * A single panel of a Grafana dashboard, as listed by the backend.
+ *
+ * @public
+ */
+export type GrafanaPanel = {
+  /** The panel id, unique within its dashboard. */
+  id: number;
+  /** The panel title. */
+  title: string;
+  /** The raw Grafana panel type (`timeseries`, `stat`, `table`, ...). */
+  type: string;
+  /** How the frontend renders this panel. */
+  kind: GrafanaPanelKind;
+  /** The panel description, if any. */
+  description?: string;
+  /** The uid of the dashboard containing the panel. */
+  dashboardUid: string;
+  /** The name of the instance the panel was read from. */
+  instanceName: string;
+};
+
+/**
+ * A single point of a time series: a timestamp and a value.
+ *
+ * @public
+ */
+export type GrafanaPanelPoint = {
+  /** The point's timestamp, in epoch milliseconds. */
+  timeMs: number;
+  /** The point's value; `null` marks a gap in the series. */
+  value: number | null;
+};
+
+/**
+ * A single named series of a panel's query results.
+ *
+ * @public
+ */
+export type GrafanaPanelSeries = {
+  /** The display name of the series. */
+  name: string;
+  /** The labels attached to the series, if any. */
+  labels?: Record<string, string>;
+  /** The data points, ordered by time. */
+  points: GrafanaPanelPoint[];
+};
+
+/**
+ * The queried data of a single panel, normalized from Grafana data frames.
+ *
+ * @public
+ */
+export type GrafanaPanelData = {
+  /** The id of the panel the data belongs to. */
+  panelId: number;
+  /** The normalized series, across all of the panel's queries. */
+  series: GrafanaPanelSeries[];
+  /** Human-readable notes about queries that failed or were skipped. */
+  warnings?: string[];
 };
 
 /**
@@ -111,3 +207,19 @@ export type ListDashboardsResponse = {
 export type ListAlertsResponse = {
   items: GrafanaAlert[];
 };
+
+/**
+ * Response body for the panel listing endpoint.
+ *
+ * @public
+ */
+export type ListPanelsResponse = {
+  items: GrafanaPanel[];
+};
+
+/**
+ * Response body for the panel data endpoint.
+ *
+ * @public
+ */
+export type GetPanelDataResponse = GrafanaPanelData;

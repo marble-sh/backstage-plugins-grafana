@@ -16,7 +16,7 @@
 
 import express from 'express';
 import Router from 'express-promise-router';
-import { NotAllowedError } from '@backstage/errors';
+import { InputError, NotAllowedError, NotFoundError } from '@backstage/errors';
 import { parseLabelSelector } from '@marble-sh/backstage-plugin-grafana-node';
 import { GrafanaService } from './GrafanaService';
 
@@ -49,9 +49,16 @@ export async function createRouter(options: {
    * routes respond 403.
    */
   allowOnDemandRefresh?: boolean;
+  /**
+   * Whether the panel routes are served (default `true`). Panel listings and
+   * panel data always read live from Grafana, so `false` disables them (403)
+   * for deployments that want schedule-only Grafana traffic.
+   */
+  allowPanelQueries?: boolean;
 }): Promise<express.Router> {
   const { grafanaService } = options;
   const allowOnDemandRefresh = options.allowOnDemandRefresh ?? true;
+  const allowPanelQueries = options.allowPanelQueries ?? true;
   const router = Router();
   router.use(express.json());
 
@@ -62,6 +69,14 @@ export async function createRouter(options: {
     if (!allowOnDemandRefresh) {
       throw new NotAllowedError(
         'On-demand refresh is disabled by configuration (grafana.allowOnDemandRefresh)',
+      );
+    }
+  };
+
+  const assertPanelQueriesAllowed = () => {
+    if (!allowPanelQueries) {
+      throw new NotAllowedError(
+        'Panel queries are disabled by configuration (grafana.allowPanelQueries)',
       );
     }
   };
@@ -93,6 +108,45 @@ export async function createRouter(options: {
     });
     res.json({ items });
   });
+
+  router.get('/instances/:name/dashboards/:uid/panels', async (req, res) => {
+    assertPanelQueriesAllowed();
+    if (!grafanaService.getPanels) {
+      throw new NotFoundError(
+        'Panel queries are not supported by the configured Grafana service',
+      );
+    }
+    const items = await grafanaService.getPanels({
+      instanceName: req.params.name,
+      dashboardUid: req.params.uid,
+    });
+    res.json({ items });
+  });
+
+  router.get(
+    '/instances/:name/dashboards/:uid/panels/:panelId/data',
+    async (req, res) => {
+      assertPanelQueriesAllowed();
+      if (!grafanaService.getPanelData) {
+        throw new NotFoundError(
+          'Panel queries are not supported by the configured Grafana service',
+        );
+      }
+      if (!/^\d+$/.test(req.params.panelId)) {
+        throw new InputError(
+          `Invalid panel id '${req.params.panelId}', expected an integer`,
+        );
+      }
+      const data = await grafanaService.getPanelData({
+        instanceName: req.params.name,
+        dashboardUid: req.params.uid,
+        panelId: Number(req.params.panelId),
+        from: toString(req.query.from),
+        to: toString(req.query.to),
+      });
+      res.json(data);
+    },
+  );
 
   router.post('/instances/:name/refresh', async (req, res) => {
     assertRefreshAllowed();

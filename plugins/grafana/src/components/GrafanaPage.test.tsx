@@ -27,6 +27,8 @@ function renderPage(api: Partial<GrafanaApi>) {
     listInstances: jest.fn().mockResolvedValue([]),
     listDashboards: jest.fn().mockResolvedValue([]),
     listAlerts: jest.fn().mockResolvedValue([]),
+    listPanels: jest.fn().mockResolvedValue([]),
+    getPanelData: jest.fn().mockResolvedValue({ panelId: 1, series: [] }),
     ...api,
   };
   return renderInTestApp(

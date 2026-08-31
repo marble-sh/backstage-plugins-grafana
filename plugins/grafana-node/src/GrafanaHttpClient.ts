@@ -14,11 +14,14 @@
  * limitations under the License.
  */
 
-import { ResponseError } from '@backstage/errors';
+import { NotFoundError, ResponseError } from '@backstage/errors';
 import {
   GrafanaAlert,
+  GrafanaAlertHealth,
   GrafanaAlertState,
   GrafanaDashboard,
+  GrafanaPanel,
+  GrafanaPanelData,
 } from '@marble-sh/backstage-plugin-grafana-common';
 import { GrafanaInstanceConfig } from './config';
 import {
@@ -27,6 +30,7 @@ import {
   filterAlerts,
   filterDashboards,
 } from './filters';
+import { buildPanelQueries, extractPanels, normalizeFrames } from './panels';
 
 /**
  * Options for listing dashboards.
@@ -43,7 +47,23 @@ export type ListDashboardsOptions = DashboardFilter;
 export type ListAlertsOptions = AlertFilter;
 
 /**
+ * The time range for a panel data query. Both bounds accept Grafana time
+ * expressions: `now`, `now-<n><s|m|h|d|w>`, or epoch milliseconds.
+ *
+ * @public
+ */
+export type GetPanelDataOptions = {
+  /** The start of the range. Defaults to `now-6h`. */
+  from?: string;
+  /** The end of the range. Defaults to `now`. */
+  to?: string;
+};
+
+/**
  * A read-only client for a single Grafana instance.
+ *
+ * The panel methods are optional so that custom implementations that predate
+ * them stay valid; consumers treat their absence as "panels not supported".
  *
  * @public
  */
@@ -52,6 +72,14 @@ export interface GrafanaClient {
   listDashboards(options?: ListDashboardsOptions): Promise<GrafanaDashboard[]>;
   /** Lists alert rules with their current state, optionally filtered by labels. */
   listAlerts(options?: ListAlertsOptions): Promise<GrafanaAlert[]>;
+  /** Lists the panels of a single dashboard. */
+  getPanels?(dashboardUid: string): Promise<GrafanaPanel[]>;
+  /** Queries the data of a single panel over a time range. */
+  getPanelData?(
+    dashboardUid: string,
+    panelId: number,
+    options?: GetPanelDataOptions,
+  ): Promise<GrafanaPanelData>;
 }
 
 /**
@@ -116,12 +144,53 @@ type LegacySearchDashboard = {
   tags?: string[];
 };
 
+type PrometheusAlertInstance = {
+  state?: string;
+  activeAt?: string;
+  value?: string;
+  labels?: Record<string, string>;
+};
+
 type PrometheusRule = {
   name?: string;
   state?: string;
   type?: string;
+  uid?: string;
+  health?: string;
+  activeAt?: string;
   labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+  alerts?: PrometheusAlertInstance[];
 };
+
+const KNOWN_ALERT_HEALTHS: GrafanaAlertHealth[] = ['ok', 'error', 'nodata'];
+
+const toAlertHealth = (health: unknown): GrafanaAlertHealth | undefined => {
+  if (health === undefined) {
+    return undefined;
+  }
+  return KNOWN_ALERT_HEALTHS.includes(health as GrafanaAlertHealth)
+    ? (health as GrafanaAlertHealth)
+    : 'unknown';
+};
+
+/** Grafana reports "never active" as the Go zero time (year 1). */
+const toActiveAt = (activeAt: unknown): string | undefined =>
+  typeof activeAt === 'string' && activeAt && !activeAt.startsWith('0001-')
+    ? activeAt
+    : undefined;
+
+/** The annotations linking an alert rule to its dashboard panel. */
+const DASHBOARD_UID_ANNOTATION = '__dashboardUid__';
+const PANEL_ID_ANNOTATION = '__panelId__';
+
+/** How long a fetched dashboard model is reused for panel data queries. */
+const MODEL_CACHE_TTL_MS = 30_000;
+
+type DsQueryResults = Record<
+  string,
+  { status?: number; frames?: unknown[]; error?: string } | undefined
+>;
 
 type PrometheusGroup = {
   name?: string;
@@ -142,6 +211,10 @@ type PrometheusGroup = {
 export class GrafanaHttpClient implements GrafanaClient {
   private readonly instance: GrafanaInstanceConfig;
   private readonly fetch: FetchApi;
+  private readonly modelCache = new Map<
+    string,
+    { promise: Promise<Record<string, unknown>>; expiresAt: number }
+  >();
 
   constructor(options: { instance: GrafanaInstanceConfig; fetch?: FetchApi }) {
     this.instance = options.instance;
@@ -179,18 +252,196 @@ export class GrafanaHttpClient implements GrafanaClient {
         if (rule.type && rule.type !== 'alerting') {
           continue;
         }
+        const summary = rule.annotations?.summary;
+        const dashboardUid = rule.annotations?.[DASHBOARD_UID_ANNOTATION];
+        const panelId = Number(rule.annotations?.[PANEL_ID_ANNOTATION]);
+        const activeAt = toActiveAt(rule.activeAt);
         alerts.push({
           name: rule.name ?? '',
           state: toAlertState(rule.state),
-          url: `${this.instance.baseUrl}/alerting/list`,
+          url: rule.uid
+            ? `${this.instance.baseUrl}/alerting/grafana/${encodeURIComponent(
+                rule.uid,
+              )}/view`
+            : `${this.instance.baseUrl}/alerting/list`,
           labels: rule.labels ?? {},
           folderTitle,
           instanceName: this.instance.name,
+          ...(rule.uid ? { uid: rule.uid } : {}),
+          ...(rule.health !== undefined
+            ? { health: toAlertHealth(rule.health) }
+            : {}),
+          ...(summary ? { summary } : {}),
+          ...(activeAt ? { activeAt } : {}),
+          ...(Array.isArray(rule.alerts)
+            ? { activeCount: rule.alerts.length }
+            : {}),
+          ...(dashboardUid ? { dashboardUid } : {}),
+          ...(Number.isFinite(panelId) ? { panelId } : {}),
         });
       }
     }
 
     return filterAlerts(alerts, options);
+  }
+
+  /** {@inheritDoc GrafanaClient.getPanels} */
+  async getPanels(dashboardUid: string): Promise<GrafanaPanel[]> {
+    const model = await this.getDashboardModel(dashboardUid);
+    return extractPanels(model).map(panel => ({
+      id: panel.id,
+      title: panel.title,
+      type: panel.type,
+      kind: panel.kind,
+      ...(panel.description ? { description: panel.description } : {}),
+      dashboardUid,
+      instanceName: this.instance.name,
+    }));
+  }
+
+  /** {@inheritDoc GrafanaClient.getPanelData} */
+  async getPanelData(
+    dashboardUid: string,
+    panelId: number,
+    options: GetPanelDataOptions = {},
+  ): Promise<GrafanaPanelData> {
+    const from = options.from ?? 'now-6h';
+    const to = options.to ?? 'now';
+    const model = await this.getDashboardModel(dashboardUid);
+    const panel = extractPanels(model).find(p => p.id === panelId);
+    if (!panel) {
+      throw new NotFoundError(
+        `No panel with id ${panelId} on dashboard '${dashboardUid}'`,
+      );
+    }
+
+    const { queries, hiddenRefIds, warnings } = buildPanelQueries({
+      panel: panel.model,
+      model,
+      range: { from, to },
+    });
+    if (queries.length === 0) {
+      return {
+        panelId,
+        series: [],
+        ...(warnings.length ? { warnings } : {}),
+      };
+    }
+
+    const results = await this.postDsQuery({ from, to, queries });
+    const frames: unknown[] = [];
+    for (const refId of Object.keys(results).sort()) {
+      const entry = results[refId];
+      if (entry?.error) {
+        warnings.push(`Query ${refId} failed: ${entry.error}`);
+      }
+      if (hiddenRefIds.includes(refId)) {
+        continue;
+      }
+      frames.push(...(Array.isArray(entry?.frames) ? entry.frames : []));
+    }
+
+    const normalized = normalizeFrames(frames);
+    warnings.push(...normalized.warnings);
+    return {
+      panelId,
+      series: normalized.series,
+      ...(warnings.length ? { warnings } : {}),
+    };
+  }
+
+  /**
+   * Fetches the classic JSON model of a single dashboard, deduplicating
+   * concurrent requests and briefly memoizing the result so that a burst of
+   * per-panel data queries reads the model only once.
+   */
+  private getDashboardModel(uid: string): Promise<Record<string, unknown>> {
+    const cached = this.modelCache.get(uid);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.promise;
+    }
+    const promise = this.fetchDashboardModel(uid);
+    this.modelCache.set(uid, {
+      promise,
+      expiresAt: Date.now() + MODEL_CACHE_TTL_MS,
+    });
+    promise.catch(() => this.modelCache.delete(uid));
+    return promise;
+  }
+
+  private async fetchDashboardModel(
+    uid: string,
+  ): Promise<Record<string, unknown>> {
+    if (this.instance.apis.dashboards === 'none') {
+      throw new NotFoundError(
+        `The dashboards API is disabled for Grafana instance '${this.instance.name}'`,
+      );
+    }
+    if (this.instance.apis.dashboards === 'legacy-search') {
+      const body = await this.get<{ dashboard?: Record<string, unknown> }>(
+        `/api/dashboards/uid/${encodeURIComponent(uid)}`,
+      );
+      if (!body.dashboard) {
+        throw new NotFoundError(`Dashboard '${uid}' has no model`);
+      }
+      return body.dashboard;
+    }
+    const body = await this.get<{
+      spec?: Record<string, unknown>;
+      status?: {
+        conversion?: { failed?: boolean; storedVersion?: string };
+      };
+    }>(
+      `/apis/dashboard.grafana.app/v1/namespaces/${
+        this.instance.namespace
+      }/dashboards/${encodeURIComponent(uid)}`,
+    );
+    if (body.status?.conversion?.failed) {
+      throw new Error(
+        `Dashboard '${uid}' could not be converted from its stored version ` +
+          `'${body.status.conversion.storedVersion ?? 'unknown'}'`,
+      );
+    }
+    if (!body.spec) {
+      throw new NotFoundError(`Dashboard '${uid}' has no model`);
+    }
+    return body.spec;
+  }
+
+  private async postDsQuery(body: {
+    from: string;
+    to: string;
+    queries: Array<Record<string, unknown>>;
+  }): Promise<DsQueryResults> {
+    const response = await this.fetch(`${this.instance.baseUrl}/api/ds/query`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.instance.token}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      // A 400 can still carry the full per-query results (partial failure).
+      if (response.status === 400) {
+        try {
+          const parsed = (await response.clone().json()) as {
+            results?: DsQueryResults;
+          };
+          if (parsed?.results) {
+            return parsed.results;
+          }
+        } catch {
+          // fall through to the generic error below
+        }
+      }
+      throw await ResponseError.fromResponse(response);
+    }
+
+    const parsed = (await response.json()) as { results?: DsQueryResults };
+    return parsed.results ?? {};
   }
 
   private async listDashboardsAppPlatform(): Promise<GrafanaDashboard[]> {

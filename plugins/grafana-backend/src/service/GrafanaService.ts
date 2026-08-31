@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
-import { LoggerService } from '@backstage/backend-plugin-api';
+import { CacheService, LoggerService } from '@backstage/backend-plugin-api';
 import { NotFoundError } from '@backstage/errors';
+import { HumanDuration, durationToMilliseconds } from '@backstage/types';
 import {
   GrafanaAlert,
   GrafanaDashboard,
   GrafanaInstanceInfo,
+  GrafanaPanel,
+  GrafanaPanelData,
 } from '@marble-sh/backstage-plugin-grafana-common';
 import {
   filterAlerts,
@@ -72,8 +75,41 @@ export type GetAlertsOptions = {
 };
 
 /**
+ * Options for listing the panels of a dashboard through the service.
+ *
+ * @public
+ */
+export type GetPanelsOptions = {
+  /** The instance to read from. */
+  instanceName: string;
+  /** The uid of the dashboard whose panels are listed. */
+  dashboardUid: string;
+};
+
+/**
+ * Options for querying the data of a single panel through the service.
+ *
+ * @public
+ */
+export type GetPanelDataOptions = {
+  /** The instance to read from. */
+  instanceName: string;
+  /** The uid of the dashboard containing the panel. */
+  dashboardUid: string;
+  /** The id of the panel to query. */
+  panelId: number;
+  /** Range start: `now`, `now-<n><s|m|h|d|w>`, or epoch ms. Defaults to `now-6h`. */
+  from?: string;
+  /** Range end, same forms as `from`. Defaults to `now`. */
+  to?: string;
+};
+
+/**
  * Reads dashboards and alerts from the configured Grafana instances, backed by a
  * {@link GrafanaStore} for caching and periodic refresh.
+ *
+ * The panel methods are optional so that custom implementations that predate
+ * them stay valid; the router responds 404 when they are absent.
  *
  * @public
  */
@@ -86,6 +122,10 @@ export interface GrafanaService {
   getAlerts(options: GetAlertsOptions): Promise<GrafanaAlert[]>;
   /** Refreshes a single instance, or all instances when no name is given. */
   refresh(instanceName?: string): Promise<void>;
+  /** Returns the panels of a single dashboard, live from Grafana. */
+  getPanels?(options: GetPanelsOptions): Promise<GrafanaPanel[]>;
+  /** Returns the queried data of a single panel, live from Grafana. */
+  getPanelData?(options: GetPanelDataOptions): Promise<GrafanaPanelData>;
 }
 
 /**
@@ -98,6 +138,8 @@ export class DefaultGrafanaService implements GrafanaService {
   private readonly store: GrafanaStore;
   private readonly logger: LoggerService;
   private readonly fetchOnDemand: boolean;
+  private readonly cache?: CacheService;
+  private readonly panelCacheTtlMs: number;
 
   constructor(options: {
     instances: GrafanaInstance[];
@@ -110,6 +152,14 @@ export class DefaultGrafanaService implements GrafanaService {
      * schedule, the refresh endpoints, or a `refresh: true` read option).
      */
     fetchOnDemand?: boolean;
+    /**
+     * When given, panel listings and panel data are cached here for
+     * `panelDataCacheTtl` to absorb bursts (a dashboard opening queries every
+     * panel at once). Without it, every panel request reads live.
+     */
+    cache?: CacheService;
+    /** Time-to-live for cached panel data (default 30 seconds). */
+    panelDataCacheTtl?: HumanDuration;
   }) {
     this.instances = new Map(
       options.instances.map(instance => [instance.config.name, instance]),
@@ -117,6 +167,10 @@ export class DefaultGrafanaService implements GrafanaService {
     this.store = options.store;
     this.logger = options.logger;
     this.fetchOnDemand = options.fetchOnDemand ?? true;
+    this.cache = options.cache;
+    this.panelCacheTtlMs = durationToMilliseconds(
+      options.panelDataCacheTtl ?? { seconds: 30 },
+    );
   }
 
   /** {@inheritDoc GrafanaService.getInstances} */
@@ -178,6 +232,56 @@ export class DefaultGrafanaService implements GrafanaService {
         );
       }
     }
+  }
+
+  /** {@inheritDoc GrafanaService.getPanels} */
+  async getPanels(options: GetPanelsOptions): Promise<GrafanaPanel[]> {
+    const { client } = this.mustGet(options.instanceName);
+    if (!client.getPanels) {
+      throw new NotFoundError(
+        `The Grafana client for instance '${options.instanceName}' does not support panel queries`,
+      );
+    }
+    return this.withPanelCache(
+      `panels:v1:${options.instanceName}:${options.dashboardUid}`,
+      () => client.getPanels!(options.dashboardUid),
+    );
+  }
+
+  /** {@inheritDoc GrafanaService.getPanelData} */
+  async getPanelData(options: GetPanelDataOptions): Promise<GrafanaPanelData> {
+    const { client } = this.mustGet(options.instanceName);
+    if (!client.getPanelData) {
+      throw new NotFoundError(
+        `The Grafana client for instance '${options.instanceName}' does not support panel queries`,
+      );
+    }
+    const from = options.from ?? 'now-6h';
+    const to = options.to ?? 'now';
+    return this.withPanelCache(
+      `panel-data:v1:${options.instanceName}:${options.dashboardUid}:${options.panelId}:${from}:${to}`,
+      () =>
+        client.getPanelData!(options.dashboardUid, options.panelId, {
+          from,
+          to,
+        }),
+    );
+  }
+
+  private async withPanelCache<T>(
+    key: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (!this.cache) {
+      return fn();
+    }
+    const cached = await this.cache.get(key);
+    if (cached !== undefined) {
+      return cached as T;
+    }
+    const value = await fn();
+    await this.cache.set(key, value as never, { ttl: this.panelCacheTtlMs });
+    return value;
   }
 
   private resolveNames(instanceName?: string): string[] {

@@ -16,6 +16,8 @@ import { GrafanaHttpClient } from '@marble-sh/backstage-plugin-grafana-node';
 import { GrafanaInstanceApis } from '@marble-sh/backstage-plugin-grafana-node';
 import { GrafanaInstanceConfig } from '@marble-sh/backstage-plugin-grafana-node';
 import { GrafanaInstanceInfo } from '@marble-sh/backstage-plugin-grafana-common';
+import { GrafanaPanel } from '@marble-sh/backstage-plugin-grafana-common';
+import { GrafanaPanelData } from '@marble-sh/backstage-plugin-grafana-common';
 import { HumanDuration } from '@backstage/types';
 import { Knex } from 'knex';
 import { ListAlertsOptions } from '@marble-sh/backstage-plugin-grafana-node';
@@ -34,6 +36,7 @@ export class CacheGrafanaStore implements GrafanaStore {
 export function createRouter(options: {
   grafanaService: GrafanaService;
   allowOnDemandRefresh?: boolean;
+  allowPanelQueries?: boolean;
 }): Promise<express.Router>;
 
 // @public
@@ -53,10 +56,14 @@ export class DefaultGrafanaService implements GrafanaService {
     store: GrafanaStore;
     logger: LoggerService;
     fetchOnDemand?: boolean;
+    cache?: CacheService;
+    panelDataCacheTtl?: HumanDuration;
   });
   getAlerts(options: GetAlertsOptions): Promise<GrafanaAlert[]>;
   getDashboards(options: GetDashboardsOptions): Promise<GrafanaDashboard[]>;
   getInstances(): GrafanaInstanceInfo[];
+  getPanelData(options: GetPanelDataOptions): Promise<GrafanaPanelData>;
+  getPanels(options: GetPanelsOptions): Promise<GrafanaPanel[]>;
   refresh(instanceName?: string): Promise<void>;
 }
 
@@ -79,6 +86,21 @@ export type GetDashboardsOptions = {
 };
 
 // @public
+export type GetPanelDataOptions = {
+  instanceName: string;
+  dashboardUid: string;
+  panelId: number;
+  from?: string;
+  to?: string;
+};
+
+// @public
+export type GetPanelsOptions = {
+  instanceName: string;
+  dashboardUid: string;
+};
+
+// @public
 export type GrafanaBackendConfig = {
   instances: GrafanaInstanceConfig[];
   store: GrafanaStoreKind;
@@ -86,6 +108,8 @@ export type GrafanaBackendConfig = {
   schedule?: SchedulerServiceTaskScheduleDefinition;
   allowOnDemandRefresh: boolean;
   fetchOnDemand: boolean;
+  allowPanelQueries: boolean;
+  panelDataCacheTtl: HumanDuration;
 };
 
 export { GrafanaClient };
@@ -111,6 +135,8 @@ export interface GrafanaService {
   getAlerts(options: GetAlertsOptions): Promise<GrafanaAlert[]>;
   getDashboards(options: GetDashboardsOptions): Promise<GrafanaDashboard[]>;
   getInstances(): GrafanaInstanceInfo[];
+  getPanelData?(options: GetPanelDataOptions): Promise<GrafanaPanelData>;
+  getPanels?(options: GetPanelsOptions): Promise<GrafanaPanel[]>;
   refresh(instanceName?: string): Promise<void>;
 }
 

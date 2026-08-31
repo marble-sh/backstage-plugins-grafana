@@ -23,7 +23,6 @@ import {
 import { useApi } from '@backstage/core-plugin-api';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import {
-  GrafanaAlertState,
   getAlertLabelSelector,
   getGrafanaInstanceName,
   parseLabelSelector,
@@ -35,21 +34,7 @@ import ListItemText from '@material-ui/core/ListItemText';
 import Typography from '@material-ui/core/Typography';
 import useAsync from 'react-use/lib/useAsync';
 import { grafanaApiRef } from '../api';
-
-const stateColor = (
-  state: GrafanaAlertState,
-): 'default' | 'primary' | 'secondary' => {
-  switch (state) {
-    case 'firing':
-    case 'error':
-      return 'secondary';
-    case 'pending':
-    case 'no_data':
-      return 'primary';
-    default:
-      return 'default';
-  }
-};
+import { stateColor } from './alertState';
 
 /**
  * An entity card that lists the Grafana alerts for the current entity, selected
