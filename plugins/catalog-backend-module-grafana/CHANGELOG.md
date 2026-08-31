@@ -1,5 +1,16 @@
 # @marble-sh/backstage-plugin-catalog-backend-module-grafana
 
+## 1.2.1
+
+### Patch Changes
+
+- 1c32d06: Added: a README FAQ explaining the panel warnings — how to persist template
+  variable defaults in Grafana ("Save current variable values as dashboard
+  default", Save As for provisioned dashboards), why unresolvable datasources
+  are skipped, and when multi-value selections produce invalid queries.
+
+  Added: Example catalog-info.yaml file with accompanying app-config.yaml
+
 ## 1.2.0
 
 ### Minor Changes
