@@ -64,7 +64,10 @@ instance list picks it up.
 grafana:
   # Where fetched data is stored between refreshes:
   #   cache    (default) – ephemeral, honors cacheTtl
-  #   database          – durable, survives restarts and is shared across replicas
+  #   database          – durable, survives restarts and is shared across replicas.
+  #                       Database snapshots never expire, so configure a
+  #                       `schedule` with it — otherwise data only updates on
+  #                       explicit refreshes (the backend warns at startup).
   store: cache
   cacheTtl: { minutes: 15 }
 
@@ -229,7 +232,9 @@ valid Backstage credential.
 - `labelSelector` — `key=value,key2=value2`; only alerts matching **all** pairs.
 - `instance` — (on `/dashboards` and `/alerts`) restrict to a single instance.
 - `refresh` — `true` or `1` (or the bare flag) to bypass the store and read
-  live from Grafana.
+  live from Grafana. On the panel routes it bypasses the panel cache
+  (`panelDataCacheTtl`) instead. Ignored when
+  `allowOnDemandRefresh: false`.
 - `from` / `to` — (on the panel data route) the query range, as Grafana time
   expressions: `now`, `now-<n><s|m|h|d|w>`, or epoch milliseconds. Default
   `now-6h` … `now`.

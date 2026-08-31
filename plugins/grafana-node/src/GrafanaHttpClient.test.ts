@@ -602,6 +602,32 @@ describe('GrafanaHttpClient', () => {
       });
     });
 
+    it('does not parse an empty __panelId__ annotation as panel 0', async () => {
+      const { fetch } = mockFetch(() => ({
+        body: {
+          data: {
+            groups: [
+              {
+                name: 'g',
+                rules: [
+                  {
+                    name: 'r',
+                    state: 'firing',
+                    type: 'alerting',
+                    annotations: { __panelId__: '' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }));
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const [alert] = await client.listAlerts();
+      expect(alert.panelId).toBeUndefined();
+    });
+
     it('omits zero-value activeAt, maps odd health to unknown', async () => {
       const { fetch } = mockFetch(() => ({
         body: {
@@ -954,7 +980,9 @@ describe('GrafanaHttpClient', () => {
           return {
             body: {
               results: {
-                A: { status: 200, frames: [frames('A')] },
+                // The hidden query fails: its series were never going to be
+                // shown, so no user-facing warning must be produced either.
+                A: { status: 500, error: 'query timed out' },
                 B: { status: 200, frames: [frames('B')] },
               },
             },
@@ -973,6 +1001,7 @@ describe('GrafanaHttpClient', () => {
         'B',
       ]);
       expect(data.series.map(s => s.name)).toEqual(['B']);
+      expect(data.warnings).toBeUndefined();
     });
   });
 });

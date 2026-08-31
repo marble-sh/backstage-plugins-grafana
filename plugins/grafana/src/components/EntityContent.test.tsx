@@ -130,6 +130,24 @@ describe('GrafanaDashboardsContent', () => {
     expect(api.listPanels).toHaveBeenCalledWith({
       instanceName: 'prod',
       dashboardUid: 'dash-1',
+      refresh: false,
+    });
+  });
+
+  it('bypasses the backend panel cache when the refresh button is clicked', async () => {
+    const api = makeApi();
+    renderContent(api, <GrafanaDashboardsContent />);
+
+    await screen.findAllByText(/no panels that can be rendered here/);
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Refresh panels' }),
+    );
+    await screen.findAllByText(/no panels that can be rendered here/);
+
+    expect(api.listPanels).toHaveBeenLastCalledWith({
+      instanceName: 'prod',
+      dashboardUid: 'dash-1',
+      refresh: true,
     });
   });
 
@@ -144,6 +162,7 @@ describe('GrafanaDashboardsContent', () => {
     expect(api.listPanels).toHaveBeenCalledWith({
       instanceName: 'prod',
       dashboardUid: 'dash-2',
+      refresh: false,
     });
   });
 

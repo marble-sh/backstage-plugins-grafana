@@ -94,9 +94,14 @@ describe('buildGrafanaEntities', () => {
     expect(resource.metadata.annotations).toMatchObject({
       [ANNOTATION_LOCATION]: 'grafana:prod',
       'grafana/instance': 'prod',
-      'grafana/dashboard-selector': 'My Service',
       'grafana/dashboard-uid': 'abc123',
     });
+    // No title-based selector: selectors AND together, so a stale title
+    // (renamed in Grafana between discovery runs) would exclude the
+    // dashboard its own uid still matches.
+    expect(resource.metadata.annotations).not.toHaveProperty(
+      'grafana/dashboard-selector',
+    );
     expect(resource.metadata.links).toEqual([
       {
         url: 'https://grafana.example.com/d/abc123/my-service',

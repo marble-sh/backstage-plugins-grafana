@@ -29,11 +29,14 @@ const prodInstance = {
 };
 
 function mockFetch(response: unknown, status = 200) {
-  return jest.fn().mockResolvedValue(
-    new Response(JSON.stringify(response), {
-      status,
-      headers: { 'content-type': 'application/json' },
-    }),
+  // A fresh Response per call: the handler may issue several requests (a GET
+  // probe before an update), and a Response body can only be read once.
+  return jest.fn().mockImplementation(
+    async () =>
+      new Response(JSON.stringify(response), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      }),
   ) as unknown as typeof fetch;
 }
 
@@ -97,8 +100,10 @@ describe('grafana:dashboard:create', () => {
     expect(body.metadata.annotations['grafana.app/folder']).toBe('folder-1');
   });
 
-  it('updates via PUT when overwrite is set and a uid is given', async () => {
-    const fetch = mockFetch({ metadata: { name: 'my-uid' } });
+  it('updates via PUT with the current resourceVersion when overwrite is set and the dashboard exists', async () => {
+    const fetch = mockFetch({
+      metadata: { name: 'my-uid', resourceVersion: '42' },
+    });
     const { handler } = run({
       input: { title: 'T', uid: 'my-uid', overwrite: true },
       fetch,
@@ -106,11 +111,42 @@ describe('grafana:dashboard:create', () => {
 
     await handler();
 
-    const [url, init] = (fetch as jest.Mock).mock.calls[0];
+    const itemUrl =
+      'https://grafana.example.com/apis/dashboard.grafana.app/v1/namespaces/default/dashboards/my-uid';
+    const [probeUrl, probeInit] = (fetch as jest.Mock).mock.calls[0];
+    expect(probeUrl).toBe(itemUrl);
+    expect(probeInit.method).toBe('GET');
+
+    const [url, init] = (fetch as jest.Mock).mock.calls[1];
     expect(init.method).toBe('PUT');
+    expect(url).toBe(itemUrl);
+    expect(JSON.parse(init.body).metadata.resourceVersion).toBe('42');
+  });
+
+  it('falls back to a create when overwrite is set but the dashboard does not exist', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ metadata: { name: 'my-uid' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ) as unknown as typeof globalThis.fetch;
+    const { ctx, handler } = run({
+      input: { title: 'T', uid: 'my-uid', overwrite: true },
+      fetch,
+    });
+
+    await handler();
+
+    const [url, init] = (fetch as jest.Mock).mock.calls[1];
+    expect(init.method).toBe('POST');
     expect(url).toBe(
-      'https://grafana.example.com/apis/dashboard.grafana.app/v1/namespaces/default/dashboards/my-uid',
+      'https://grafana.example.com/apis/dashboard.grafana.app/v1/namespaces/default/dashboards',
     );
+    expect(JSON.parse(init.body).metadata.resourceVersion).toBeUndefined();
+    expect(ctx.output).toHaveBeenCalledWith('uid', 'my-uid');
   });
 
   it('uses the only configured instance when instanceName is omitted', async () => {

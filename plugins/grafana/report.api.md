@@ -34,15 +34,16 @@ export type GetPanelDataRequest = {
   panelId: number;
   from?: string;
   to?: string;
+  refresh?: boolean;
 };
 
 // @public
 export interface GrafanaApi {
-  getPanelData(request: GetPanelDataRequest): Promise<GrafanaPanelData>;
+  getPanelData?(request: GetPanelDataRequest): Promise<GrafanaPanelData>;
   listAlerts(request?: ListAlertsRequest): Promise<GrafanaAlert[]>;
   listDashboards(request?: ListDashboardsRequest): Promise<GrafanaDashboard[]>;
   listInstances(): Promise<GrafanaInstanceInfo[]>;
-  listPanels(request: ListPanelsRequest): Promise<GrafanaPanel[]>;
+  listPanels?(request: ListPanelsRequest): Promise<GrafanaPanel[]>;
 }
 
 // @public
@@ -90,6 +91,7 @@ export type ListDashboardsRequest = {
 export type ListPanelsRequest = {
   instanceName: string;
   dashboardUid: string;
+  refresh?: boolean;
 };
 
 // @public

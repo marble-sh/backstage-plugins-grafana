@@ -171,9 +171,35 @@ export function createGrafanaDashboardCreateAction(options: {
         );
       }
 
-      const isUpdate = Boolean(overwrite && uid);
       const collection = `/apis/dashboard.grafana.app/v1/namespaces/${instance.namespace}/dashboards`;
-      const path = isUpdate ? `${collection}/${uid}` : collection;
+      const itemPath = `${collection}/${encodeURIComponent(uid ?? '')}`;
+      const headers = {
+        Authorization: `Bearer ${instance.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      };
+
+      // An update must carry the current resourceVersion (Kubernetes-style
+      // optimistic concurrency). When the dashboard does not exist yet, an
+      // `overwrite` run degrades to a plain create, keeping template runs
+      // idempotent.
+      let isUpdate = false;
+      let resourceVersion: string | undefined;
+      if (overwrite && uid) {
+        const current = await fetchApi(`${instance.baseUrl}${itemPath}`, {
+          method: 'GET',
+          headers,
+        });
+        if (current.ok) {
+          const currentBody = (await current.json()) as {
+            metadata?: { resourceVersion?: string };
+          };
+          resourceVersion = currentBody.metadata?.resourceVersion;
+          isUpdate = true;
+        } else if (current.status !== 404) {
+          throw await ResponseError.fromResponse(current);
+        }
+      }
 
       ctx.logger.info(
         `${
@@ -181,29 +207,29 @@ export function createGrafanaDashboardCreateAction(options: {
         } Grafana dashboard '${title}' in instance '${instance.name}'`,
       );
 
-      const response = await fetchApi(`${instance.baseUrl}${path}`, {
-        method: isUpdate ? 'PUT' : 'POST',
-        headers: {
-          Authorization: `Bearer ${instance.token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
+      const response = await fetchApi(
+        `${instance.baseUrl}${isUpdate ? itemPath : collection}`,
+        {
+          method: isUpdate ? 'PUT' : 'POST',
+          headers,
+          body: JSON.stringify({
+            metadata: {
+              ...(uid ? { name: uid } : {}),
+              ...(resourceVersion ? { resourceVersion } : {}),
+              ...(folderUid
+                ? { annotations: { 'grafana.app/folder': folderUid } }
+                : {}),
+            },
+            spec: {
+              title,
+              schemaVersion: 41,
+              tags: tags ?? [],
+              panels: [],
+              ...(dashboard ?? {}),
+            },
+          }),
         },
-        body: JSON.stringify({
-          metadata: {
-            ...(uid ? { name: uid } : {}),
-            ...(folderUid
-              ? { annotations: { 'grafana.app/folder': folderUid } }
-              : {}),
-          },
-          spec: {
-            title,
-            schemaVersion: 41,
-            tags: tags ?? [],
-            panels: [],
-            ...(dashboard ?? {}),
-          },
-        }),
-      });
+      );
 
       if (!response.ok) {
         throw await ResponseError.fromResponse(response);

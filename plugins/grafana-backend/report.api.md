@@ -92,12 +92,14 @@ export type GetPanelDataOptions = {
   panelId: number;
   from?: string;
   to?: string;
+  refresh?: boolean;
 };
 
 // @public
 export type GetPanelsOptions = {
   instanceName: string;
   dashboardUid: string;
+  refresh?: boolean;
 };
 
 // @public

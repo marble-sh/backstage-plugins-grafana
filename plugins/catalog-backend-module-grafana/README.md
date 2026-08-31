@@ -17,10 +17,13 @@ lists all of its dashboards, and each dashboard links back to its instance.
 Every generated entity carries the required
 `backstage.io/managed-by-location` and
 `backstage.io/managed-by-origin-location` annotations and a `grafana/instance`
-annotation (dashboards also get a `grafana/dashboard-selector` and a
-`grafana/dashboard-uid`), so the [frontend plugin](../grafana/README.md) tabs
-light up on the generated entities automatically — a dashboard `Resource`'s
-Grafana tab shows exactly its own dashboard, selected by uid.
+annotation (dashboards also get a `grafana/dashboard-uid`), so the
+[frontend plugin](../grafana/README.md) tabs light up on the generated
+entities automatically — a dashboard `Resource`'s Grafana tab shows exactly
+its own dashboard, selected by uid. No title-based
+`grafana/dashboard-selector` is emitted: the selectors combine with AND, so a
+stale title (the dashboard renamed in Grafana between discovery runs) would
+exclude the dashboard its own uid still matches.
 
 Discovery is resilient to outages: when reading an instance fails, its
 previously discovered entities are re-emitted (a full refresh replaces the
@@ -168,7 +171,6 @@ metadata:
   annotations:
     backstage.io/managed-by-location: grafana:production
     grafana/instance: production
-    grafana/dashboard-selector: My Service
     grafana/dashboard-uid: abc123
   links:
     - url: https://grafana.internal.example.com/d/abc123/my-service

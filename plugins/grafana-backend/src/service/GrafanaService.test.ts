@@ -158,6 +158,35 @@ describe('DefaultGrafanaService', () => {
     expect(dashboards.map(d => d.uid).sort()).toEqual(['a', 'b']);
   });
 
+  it('skips a failing instance during a fan-out instead of failing the read', async () => {
+    const failingClient: GrafanaClient = {
+      listDashboards: () => Promise.reject(new Error('grafana is down')),
+      listAlerts: () => Promise.reject(new Error('grafana is down')),
+    };
+    const service = makeService([
+      { config: configFor('prod'), client: new FakeClient([dash('a')]) },
+      {
+        config: configFor('broken'),
+        client: failingClient as FakeClient,
+      },
+      {
+        config: configFor('staging'),
+        client: new FakeClient([dash('b')], [alert('al', { team: 'a' })]),
+      },
+    ]);
+
+    const dashboards = await service.getDashboards({});
+    expect(dashboards.map(d => d.uid).sort()).toEqual(['a', 'b']);
+
+    const alerts = await service.getAlerts({});
+    expect(alerts.map(a => a.name)).toEqual(['al']);
+
+    // A read that names the failing instance still surfaces its error.
+    await expect(
+      service.getDashboards({ instanceName: 'broken' }),
+    ).rejects.toThrow('grafana is down');
+  });
+
   it('applies tag filters to stored dashboards', async () => {
     const client = new FakeClient([dash('a', ['x']), dash('b', ['y'])]);
     const service = makeService([{ config: configFor('prod'), client }]);
@@ -431,6 +460,34 @@ describe('DefaultGrafanaService', () => {
       await service.getPanelData(options);
       expect(client.getPanelDataCalls).toHaveLength(1);
       expect(cache.ttls.every(entry => entry.ttl === 42_000)).toBe(true);
+    });
+
+    it('bypasses the cache (but re-fills it) when refresh is requested', async () => {
+      const client = new PanelClient([]);
+      const cache = new MemoryCache();
+      const service = makePanelService(client, cache);
+
+      await service.getPanels({ instanceName: 'prod', dashboardUid: 'd' });
+      await service.getPanels({
+        instanceName: 'prod',
+        dashboardUid: 'd',
+        refresh: true,
+      });
+      expect(client.getPanelsCalls).toBe(2);
+      // The refreshed value replaced the cached one and serves the next read.
+      await service.getPanels({ instanceName: 'prod', dashboardUid: 'd' });
+      expect(client.getPanelsCalls).toBe(2);
+
+      const options = {
+        instanceName: 'prod',
+        dashboardUid: 'd',
+        panelId: 1,
+        from: 'now-1h',
+        to: 'now',
+      };
+      await service.getPanelData(options);
+      await service.getPanelData({ ...options, refresh: true });
+      expect(client.getPanelDataCalls).toHaveLength(2);
     });
 
     it('treats different ranges and panels as distinct cache entries', async () => {

@@ -281,6 +281,23 @@ describe('createRouter', () => {
       expect(getPanels).toHaveBeenCalledWith({
         instanceName: 'prod',
         dashboardUid: 'd1',
+        refresh: false,
+      });
+    });
+
+    it('GET .../panels honors refresh=true', async () => {
+      const getPanels = jest.fn().mockResolvedValue([]);
+      const { service } = stubService({ getPanels });
+      const app = await makeApp(service);
+
+      await request(app)
+        .get('/instances/prod/dashboards/d1/panels')
+        .query('refresh=true');
+
+      expect(getPanels).toHaveBeenCalledWith({
+        instanceName: 'prod',
+        dashboardUid: 'd1',
+        refresh: true,
       });
     });
 
@@ -302,6 +319,28 @@ describe('createRouter', () => {
         panelId: 3,
         from: 'now-1h',
         to: 'now',
+        refresh: false,
+      });
+    });
+
+    it('GET .../panels/:panelId/data honors refresh=true', async () => {
+      const getPanelData = jest
+        .fn()
+        .mockResolvedValue({ panelId: 3, series: [] });
+      const { service } = stubService({ getPanelData });
+      const app = await makeApp(service);
+
+      await request(app)
+        .get('/instances/prod/dashboards/d1/panels/3/data')
+        .query('refresh=true');
+
+      expect(getPanelData).toHaveBeenCalledWith({
+        instanceName: 'prod',
+        dashboardUid: 'd1',
+        panelId: 3,
+        from: undefined,
+        to: undefined,
+        refresh: true,
       });
     });
 
@@ -320,6 +359,7 @@ describe('createRouter', () => {
         panelId: 3,
         from: undefined,
         to: undefined,
+        refresh: false,
       });
     });
 

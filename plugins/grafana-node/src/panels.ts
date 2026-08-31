@@ -332,7 +332,27 @@ export function buildPanelQueries(options: {
   const hiddenRefIds: string[] = [];
   const warnings: string[] = [];
 
-  asArray(panel.targets).forEach((raw, index) => {
+  // Grafana keys `/api/ds/query` results by refId, so a generated fallback
+  // refId must never collide with one another target declares explicitly.
+  const usedRefIds = new Set(
+    asArray(panel.targets)
+      .map(raw => asRecord(raw)?.refId)
+      .filter((refId): refId is string => typeof refId === 'string' && !!refId),
+  );
+  const nextFreeRefId = (): string => {
+    for (let i = 0; ; i++) {
+      const candidate =
+        i < REF_IDS.length
+          ? REF_IDS[i]
+          : `${REF_IDS[i % REF_IDS.length]}${Math.floor(i / REF_IDS.length)}`;
+      if (!usedRefIds.has(candidate)) {
+        usedRefIds.add(candidate);
+        return candidate;
+      }
+    }
+  };
+
+  asArray(panel.targets).forEach(raw => {
     const target = asRecord(raw);
     if (!target) {
       return;
@@ -340,7 +360,7 @@ export function buildPanelQueries(options: {
     const refId =
       typeof target.refId === 'string' && target.refId
         ? target.refId
-        : REF_IDS[index % REF_IDS.length];
+        : nextFreeRefId();
     const datasource = resolveDatasource(target);
     if (datasource === undefined) {
       warnings.push(
