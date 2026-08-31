@@ -3,13 +3,15 @@
 A read-only [Grafana](https://grafana.com/) backend plugin for Backstage,
 targeting the **new backend system**.
 
-The backend performs **all** communication with Grafana. It reads dashboards and
-alerts, caches them (in the Backstage cache **or** database), optionally
-refreshes them on a schedule, and exposes a small read-only REST API under
-`/api/grafana`. The frontend plugin
-([`@marble-sh/backstage-plugin-grafana`](../grafana/README.md)) and the catalog
-module talk only to this API — they never contact Grafana directly, so all
-credentials stay in the backend.
+The backend performs **all** browser-facing communication with Grafana. It
+reads dashboards and alerts, caches them (in the Backstage cache **or**
+database), optionally refreshes them on a schedule, and exposes a small
+read-only REST API under `/api/grafana`. The frontend plugin
+([`@marble-sh/backstage-plugin-grafana`](../grafana/README.md)) talks only to
+this API and never contacts Grafana; the catalog and scaffolder modules run
+server-side and reach Grafana through the shared
+[`grafana-node`](../grafana-node/README.md) client. Either way, credentials
+never leave the backend.
 
 ## Features
 
@@ -150,8 +152,9 @@ to `true`; each can be set independently.
 - **`allowOnDemandRefresh`** — may API callers force live reads?
 
   - `true` (default): `?refresh=true` (also `?refresh=1` or the bare flag)
-    bypasses the store, and `POST /refresh` / `POST /instances/:name/refresh`
-    trigger immediate refreshes.
+    bypasses the store (on the panel routes: the panel cache), and
+    `POST /refresh` / `POST /instances/:name/refresh` trigger immediate
+    refreshes.
   - `false`: `refresh` query parameters are silently ignored (the request is
     served exactly as if the parameter were absent) and both `POST …/refresh`
     routes respond `403 NotAllowedError`. The scheduled refresh is unaffected.
@@ -320,6 +323,11 @@ Each request resolves to a per-instance snapshot (all dashboards + all alerts):
 
 Because filtering happens after retrieval, a single cached snapshot serves many
 entities with different selectors, keeping Grafana API traffic low.
+
+A request that spans **all** instances (no instance in the path or query)
+skips — and logs — any instance that fails to load, so one unreachable
+Grafana cannot fail reads the other instances can still serve. Naming an
+instance explicitly surfaces its error instead.
 
 Panel listings and panel data are different: they are inherently live (a graph
 of a stale range is wrong, not cached), so they bypass the snapshot store

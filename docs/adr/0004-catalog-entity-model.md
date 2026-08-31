@@ -26,9 +26,12 @@ infrastructure that services depend on, not owned software components. Generated
 entities are emitted by an `EntityProvider` using a full mutation, and each
 carries the required `backstage.io/managed-by-location` and
 `backstage.io/managed-by-origin-location` annotations plus `grafana/instance`
-(dashboards also get `grafana/dashboard-selector`) so the frontend content
-appears on them automatically. Entity names and tags are sanitized to satisfy
-catalog validation.
+(dashboards also get `grafana/dashboard-uid`) so the frontend content appears
+on them automatically. Entity names and tags are sanitized to satisfy catalog
+validation. (Originally dashboards also carried a title-based
+`grafana/dashboard-selector`; that was dropped because the selectors AND
+together, so a title gone stale between discovery runs could exclude the
+dashboard its own uid still matched.)
 
 ## Consequences
 

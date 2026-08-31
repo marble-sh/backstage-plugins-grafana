@@ -38,7 +38,8 @@ proxies Grafana's datasource query API — the browser never talks to Grafana):
   `gauge`, and `singlestat` panels render as single-value tiles showing the
   latest value. Other panel types are counted and linked into Grafana.
 - A shared time-range picker (15 minutes to 7 days, default 6 hours) and a
-  refresh button re-query the visible panels.
+  refresh button re-query the visible panels (the refresh bypasses the
+  backend's short panel cache).
 - Dashboard template variables are resolved with their **dashboard default**
   values; targets whose datasource cannot be resolved (dashboard-default
   datasources, unset datasource variables) are skipped with a visible note.

@@ -18,7 +18,9 @@ desired, contributed upstream later.
 
 The frontend never talks to Grafana directly. All authentication, caching, and
 data-stitching live in the backend, which exposes a small read-only REST API
-that the other packages consume.
+for the frontend. The catalog and scaffolder modules run server-side and reach
+Grafana through the shared `grafana-node` client (as the diagram shows), using
+the same instance configuration and tokens.
 
 ```
                 +------------------------------+

@@ -1,9 +1,10 @@
 # @marble-sh/backstage-plugin-grafana-node
 
 Node-side library shared by the Grafana Backstage plugins. It contains the
-pieces that both the [backend plugin](../grafana-backend/README.md) and the
-[catalog module](../catalog-backend-module-grafana/README.md) need, so neither
-has to depend on the other:
+pieces that the [backend plugin](../grafana-backend/README.md), the
+[catalog module](../catalog-backend-module-grafana/README.md), and the
+[scaffolder module](../scaffolder-backend-module-grafana/README.md) all need,
+so none of them has to depend on another plugin package:
 
 - **`GrafanaHttpClient`** — a read-only client for a single Grafana instance.
   Dashboards are read from the App Platform `dashboard.grafana.app/v1` API

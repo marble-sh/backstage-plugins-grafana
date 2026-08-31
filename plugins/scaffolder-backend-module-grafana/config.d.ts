@@ -31,8 +31,8 @@ export interface Config {
        *    Targeting any other instance fails the action with a 403-style
        *    error, and automatic instance selection (when `instanceName` is
        *    omitted) only considers the listed instances. A listed name that
-       *    does not exist under `grafana.instances` fails the action with a
-       *    configuration error.
+       *    does not exist under `grafana.instances` fails backend startup
+       *    with a configuration error (and, defensively, any action run).
        */
       allowedInstances?: string[];
 
