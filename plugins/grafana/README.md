@@ -53,13 +53,40 @@ the rule's `summary` annotation — each deep-linked to the rule in Grafana.
 
 ## Entity annotations
 
-| Annotation                     | Used by             | Meaning                                                                                      |
-| ------------------------------ | ------------------- | -------------------------------------------------------------------------------------------- |
-| `grafana/instance`             | dashboards + alerts | Which configured Grafana instance to query.                                                  |
-| `grafana/tag-selector`         | dashboards          | Comma-separated dashboard tags to filter by.                                                 |
-| `grafana/dashboard-selector`   | dashboards          | Comma-separated title substrings (any match).                                                |
-| `grafana/dashboard-uid`        | dashboards          | A single dashboard uid (exact match). Set by catalog discovery on its dashboard `Resource`s. |
-| `grafana/alert-label-selector` | alerts              | `key=value,...` alert label matchers.                                                        |
+The plugin is driven entirely by five entity annotations. Each is optional;
+what an entity displays is the result of combining the ones it carries.
+
+| Annotation                     | Used by             | Value                                                             | Semantics                                                                                                                                                                                                                                        |
+| ------------------------------ | ------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `grafana/instance`             | dashboards + alerts | An instance `name` from `grafana.instances`                       | Restricts every query to that single instance. Omit it to query **all** configured instances. The value must match a configured name exactly — an unknown name shows a `404 No Grafana instance configured with name '…'` error on the tab/card. |
+| `grafana/dashboard-selector`   | dashboards          | Comma-separated title substrings, e.g. `payments, checkout`       | Case-insensitive substring match against the dashboard title; a dashboard is selected when **any** value matches.                                                                                                                                |
+| `grafana/tag-selector`         | dashboards          | Comma-separated Grafana dashboard tags, e.g. `team-a, production` | Selects dashboards carrying **all** of the listed tags (tags match exactly).                                                                                                                                                                     |
+| `grafana/dashboard-uid`        | dashboards          | A single dashboard uid                                            | Exact, **case-sensitive** match on the uid — at most one dashboard. Catalog discovery writes this onto every dashboard `Resource` it emits, so those entities show exactly their own dashboard; it can also be set by hand.                      |
+| `grafana/alert-label-selector` | alerts              | `key=value,key2=value2`                                           | Selects alert rules whose labels contain **all** of the listed pairs (keys and values match exactly; whitespace around them is trimmed, segments without a `=` are ignored).                                                                     |
+
+How the annotations combine:
+
+- **The dashboard filters AND together.** A dashboard is shown only when it
+  passes _every_ dashboard annotation the entity carries — e.g.
+  `grafana/tag-selector: team-a` plus `grafana/dashboard-selector: payments`
+  selects dashboards tagged `team-a` **whose title also contains** `payments`.
+- **Within one annotation**, `grafana/dashboard-selector` values OR (any
+  match), while `grafana/tag-selector` tags and `grafana/alert-label-selector`
+  pairs AND (all must hold).
+- **`grafana/instance` alone selects everything** on that instance: all of its
+  dashboards and all of its alert rules. This is how the `grafana-instance`
+  Resources emitted by catalog discovery behave.
+- **Visibility gating:** the dashboards tab/card appears when the entity has
+  any of `grafana/instance`, `grafana/dashboard-selector`,
+  `grafana/tag-selector`, or `grafana/dashboard-uid`; the alerts tab/card
+  appears with `grafana/instance` or `grafana/alert-label-selector`. Entities
+  without Grafana annotations never show Grafana UI.
+- **Empty values count as absent** — an annotation set to `''` neither gates
+  nor filters.
+
+> Migrating from the community plugin? These annotations look similar but
+> behave differently — see
+> [the differences section](#differences-from-backstage-communityplugin-grafana).
 
 Example:
 

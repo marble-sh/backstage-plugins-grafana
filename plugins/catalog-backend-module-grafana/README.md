@@ -59,6 +59,8 @@ grafana:
   instances:
     - name: production
       baseUrl: https://grafana.internal.example.com
+      # Read-only (Viewer) service-account token; see the backend README's
+      # "Creating the Grafana service account and token" section.
       token: ${GRAFANA_PROD_TOKEN}
 
   catalog:

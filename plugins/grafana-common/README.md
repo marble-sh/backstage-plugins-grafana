@@ -12,16 +12,28 @@ It provides:
 
 ## Entity annotations
 
-| Annotation                     | Helper                   | Meaning                                                            |
-| ------------------------------ | ------------------------ | ------------------------------------------------------------------ |
-| `grafana/instance`             | `getGrafanaInstanceName` | Which configured Grafana instance the entity belongs to.           |
-| `grafana/dashboard-selector`   | `getDashboardSelector`   | Comma-separated title substrings; any match selects the dashboard. |
-| `grafana/dashboard-uid`        | `getDashboardUid`        | A single dashboard uid (exact, case-sensitive match).              |
-| `grafana/tag-selector`         | `getTagSelector`         | A comma-separated list of dashboard tags.                          |
-| `grafana/alert-label-selector` | `getAlertLabelSelector`  | A `key=value,...` list of alert label matchers.                    |
+| Annotation                     | Helper                   | Meaning                                                                                                          |
+| ------------------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `grafana/instance`             | `getGrafanaInstanceName` | The `grafana.instances[].name` the entity belongs to (exact match). Absent = query all configured instances.     |
+| `grafana/dashboard-selector`   | `getDashboardSelector`   | Comma-separated, case-insensitive title substrings; **any** match selects the dashboard.                         |
+| `grafana/dashboard-uid`        | `getDashboardUid`        | A single dashboard uid (exact, case-sensitive match). Written by catalog discovery on its dashboard `Resource`s. |
+| `grafana/tag-selector`         | `getTagSelector`         | Comma-separated dashboard tags; the dashboard must carry **all** of them.                                        |
+| `grafana/alert-label-selector` | `getAlertLabelSelector`  | `key=value,...` alert label matchers; the rule's labels must contain **all** pairs.                              |
 
-`isGrafanaAvailable(entity)` returns `true` when an entity carries any of the
-above annotations, and is used to gate the Grafana entity tabs and cards.
+The dashboard annotations combine with AND — a dashboard must pass every one
+the entity carries. Empty annotation values are treated as absent. The full
+matching semantics are documented in the
+[frontend plugin README](../grafana/README.md#entity-annotations).
+
+Three gating helpers decide whether an entity has Grafana content to show:
+
+- `isDashboardsAvailable(entity)` — any of `grafana/instance`,
+  `grafana/dashboard-selector`, `grafana/dashboard-uid`, or
+  `grafana/tag-selector` is present.
+- `isAlertsAvailable(entity)` — `grafana/instance` or
+  `grafana/alert-label-selector` is present.
+- `isGrafanaAvailable(entity)` — either of the above; used to gate the Grafana
+  entity tabs and cards.
 
 ```ts
 import {

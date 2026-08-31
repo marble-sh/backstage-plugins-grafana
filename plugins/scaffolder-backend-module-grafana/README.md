@@ -62,8 +62,16 @@ backend.add(
 ```
 
 The action reads its connection details from `grafana.instances` (see the
-[backend plugin](../grafana-backend/README.md) for that configuration). The
-service-account token must have permission to create dashboards.
+[backend plugin](../grafana-backend/README.md) for that configuration).
+
+Unlike the read-only plugins, this module **writes** to Grafana, so a Viewer
+token is not enough: the target instance's service account needs
+`dashboards:read` and `dashboards:create` — plus `dashboards:write` when
+templates use `overwrite: true` — in the folders your templates target. The
+simplest setup is the **Editor** basic role; with RBAC (Grafana
+Enterprise/Cloud) use `fixed:dashboards:writer` scoped to those folders. See
+[Creating the Grafana service account and token](../grafana-backend/README.md#creating-the-grafana-service-account-and-token)
+for the walkthrough.
 
 ## Guard rails (`grafana.scaffolder`)
 

@@ -89,7 +89,7 @@ grafana:
     - name: production
       title: Production Grafana
       baseUrl: https://grafana.internal.example.com
-      token: ${GRAFANA_PROD_TOKEN} # service-account token, Viewer is enough
+      token: ${GRAFANA_PROD_TOKEN} # service-account token, see "Creating the Grafana service account" below
 
     # A Grafana Cloud stack (namespace derived as "stacks-<stackId>").
     - name: cloud
@@ -101,16 +101,16 @@ grafana:
 
 ### Instance options
 
-| Key              | Required | Description                                                                                             |
-| ---------------- | -------- | ------------------------------------------------------------------------------------------------------- |
-| `name`           | yes      | Unique, stable id. Referenced by the `grafana/instance` entity annotation and by the REST API.          |
-| `baseUrl`        | yes      | Base URL of the Grafana instance, without a trailing slash.                                             |
-| `token`          | yes      | Service-account token used as a Bearer token. Read-only (Viewer) permissions are enough. Marked secret. |
-| `title`          | no       | Human-readable title. Defaults to `name`.                                                               |
-| `namespace`      | no       | App Platform namespace. Defaults to `default` (self-hosted) or `stacks-<stackId>` (cloud).              |
-| `stackId`        | no       | **Numeric** Grafana Cloud stack id (not the stack slug), used to derive the namespace (see below).      |
-| `apis`           | no       | Override or disable the API used per data type (see below).                                             |
-| `resolveFolders` | no       | `false` skips the `/api/folders` folder lookup (see below). Defaults to `true`.                         |
+| Key              | Required | Description                                                                                                                                                          |
+| ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | yes      | Unique, stable id. Referenced by the `grafana/instance` entity annotation and by the REST API.                                                                       |
+| `baseUrl`        | yes      | Base URL of the Grafana instance, without a trailing slash.                                                                                                          |
+| `token`          | yes      | Service-account token used as a Bearer token — see [Creating the Grafana service account and token](#creating-the-grafana-service-account-and-token). Marked secret. |
+| `title`          | no       | Human-readable title. Defaults to `name`.                                                                                                                            |
+| `namespace`      | no       | App Platform namespace. Defaults to `default` (self-hosted) or `stacks-<stackId>` (cloud).                                                                           |
+| `stackId`        | no       | **Numeric** Grafana Cloud stack id (not the stack slug), used to derive the namespace (see below).                                                                   |
+| `apis`           | no       | Override or disable the API used per data type (see below).                                                                                                          |
+| `resolveFolders` | no       | `false` skips the `/api/folders` folder lookup (see below). Defaults to `true`.                                                                                      |
 
 ### API selection
 
@@ -203,6 +203,69 @@ is rejected at startup. Two ways to find the id:
     https://<slug>.grafana.net/api/frontend/settings | jq -r .namespace
   # → "stacks-1216502"  — the number is the stackId
   ```
+
+## Creating the Grafana service account and token
+
+Every request to Grafana is authenticated with a Grafana **service account
+token** — the `token` of the instance configuration. Create one per instance
+(creating service accounts requires a Grafana organization administrator):
+
+1. Sign in to the Grafana instance itself — for Grafana Cloud that is the
+   stack's own Grafana at `https://<stack>.grafana.net`, **not** the
+   grafana.com portal — and open **Administration → Users and access →
+   Service accounts**.
+2. Click **Add service account**, give it a recognizable display name (for
+   example `backstage`), and assign it the **Viewer** role (see
+   [required permissions](#required-permissions) for when you need more).
+3. On the new service account, click **Add service account token**, name the
+   token, preferably set an expiration date, and click **Generate token**.
+4. Copy the generated value — it starts with `glsa_` — into the instance's
+   `token` (via an environment variable or another secret source; never
+   commit it).
+
+> **Grafana Cloud:** the plugin needs a per-stack service-account token
+> (`glsa_…`) created inside the stack's Grafana as above. A Cloud _access
+> policy_ token from the grafana.com portal (`glc_…`) authenticates a
+> different API surface and will not work here.
+
+### Required permissions
+
+What the token needs depends on the features you use:
+
+| Feature (Grafana APIs called)                                                                               | Required access                                                                |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Dashboard listing and catalog discovery (`dashboard.grafana.app` list, `/api/search`)                       | `dashboards:read`                                                              |
+| Folder titles/links, i.e. `resolveFolders` (`/api/folders`)                                                 | `folders:read`                                                                 |
+| Alerts (`/api/prometheus/grafana/api/v1/rules`)                                                             | Grafana-managed alert-rule read (the `fixed:alerting.rules:reader` role)       |
+| Panel graphs (dashboard model read + `POST /api/ds/query`)                                                  | `dashboards:read` plus `datasources:query` on the queried data sources         |
+| [Scaffolder action](../scaffolder-backend-module-grafana/README.md) (`dashboard.grafana.app` create/update) | `dashboards:read` + `dashboards:create` (+ `dashboards:write` for `overwrite`) |
+
+In practice:
+
+- The **Viewer** basic role covers everything this plugin and the catalog
+  module read: dashboards, folders, and Grafana-managed alert rules — and, on
+  OSS Grafana (and any instance without data source permissions enforced),
+  the panel-data queries too, since viewers query data sources whenever they
+  view a dashboard.
+- On **Grafana Enterprise / Cloud with data source permissions**, the Viewer
+  basic role does not automatically include `datasources:query` on every data
+  source. If panel graphs fail with authorization errors, grant the service
+  account query access on the relevant data sources (or the RBAC
+  `fixed:datasources:reader` role), or disable the panel routes with
+  `grafana.allowPanelQueries: false`.
+- The **scaffolder module writes** dashboards: give that instance's service
+  account the **Editor** basic role, or (with RBAC) `fixed:dashboards:writer`
+  scoped to the folders your templates target.
+- An instance that serves fewer features needs fewer permissions — e.g. with
+  `apis.alerts: none` the alerting API is never called, so alert-rule read
+  access is unnecessary.
+
+To inspect exactly what a token is allowed to do, ask Grafana itself:
+
+```sh
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$BASE_URL/api/access-control/user/permissions" | jq
+```
 
 ## REST API
 
