@@ -3,13 +3,15 @@
 A read-only [Grafana](https://grafana.com/) backend plugin for Backstage,
 targeting the **new backend system**.
 
-The backend performs **all** communication with Grafana. It reads dashboards and
-alerts, caches them (in the Backstage cache **or** database), optionally
-refreshes them on a schedule, and exposes a small read-only REST API under
-`/api/grafana`. The frontend plugin
-([`@marble-sh/backstage-plugin-grafana`](../grafana/README.md)) and the catalog
-module talk only to this API — they never contact Grafana directly, so all
-credentials stay in the backend.
+The backend performs **all** browser-facing communication with Grafana. It
+reads dashboards and alerts, caches them (in the Backstage cache **or**
+database), optionally refreshes them on a schedule, and exposes a small
+read-only REST API under `/api/grafana`. The frontend plugin
+([`@marble-sh/backstage-plugin-grafana`](../grafana/README.md)) talks only to
+this API and never contacts Grafana; the catalog and scaffolder modules run
+server-side and reach Grafana through the shared
+[`grafana-node`](../grafana-node/README.md) client. Either way, credentials
+never leave the backend.
 
 ## Features
 
@@ -64,7 +66,10 @@ instance list picks it up.
 grafana:
   # Where fetched data is stored between refreshes:
   #   cache    (default) – ephemeral, honors cacheTtl
-  #   database          – durable, survives restarts and is shared across replicas
+  #   database          – durable, survives restarts and is shared across replicas.
+  #                       Database snapshots never expire, so configure a
+  #                       `schedule` with it — otherwise data only updates on
+  #                       explicit refreshes (the backend warns at startup).
   store: cache
   cacheTtl: { minutes: 15 }
 
@@ -86,7 +91,7 @@ grafana:
     - name: production
       title: Production Grafana
       baseUrl: https://grafana.internal.example.com
-      token: ${GRAFANA_PROD_TOKEN} # service-account token, Viewer is enough
+      token: ${GRAFANA_PROD_TOKEN} # service-account token, see "Creating the Grafana service account" below
 
     # A Grafana Cloud stack (namespace derived as "stacks-<stackId>").
     - name: cloud
@@ -98,16 +103,16 @@ grafana:
 
 ### Instance options
 
-| Key              | Required | Description                                                                                             |
-| ---------------- | -------- | ------------------------------------------------------------------------------------------------------- |
-| `name`           | yes      | Unique, stable id. Referenced by the `grafana/instance` entity annotation and by the REST API.          |
-| `baseUrl`        | yes      | Base URL of the Grafana instance, without a trailing slash.                                             |
-| `token`          | yes      | Service-account token used as a Bearer token. Read-only (Viewer) permissions are enough. Marked secret. |
-| `title`          | no       | Human-readable title. Defaults to `name`.                                                               |
-| `namespace`      | no       | App Platform namespace. Defaults to `default` (self-hosted) or `stacks-<stackId>` (cloud).              |
-| `stackId`        | no       | **Numeric** Grafana Cloud stack id (not the stack slug), used to derive the namespace (see below).      |
-| `apis`           | no       | Override or disable the API used per data type (see below).                                             |
-| `resolveFolders` | no       | `false` skips the `/api/folders` folder lookup (see below). Defaults to `true`.                         |
+| Key              | Required | Description                                                                                                                                                          |
+| ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | yes      | Unique, stable id. Referenced by the `grafana/instance` entity annotation and by the REST API.                                                                       |
+| `baseUrl`        | yes      | Base URL of the Grafana instance, without a trailing slash.                                                                                                          |
+| `token`          | yes      | Service-account token used as a Bearer token — see [Creating the Grafana service account and token](#creating-the-grafana-service-account-and-token). Marked secret. |
+| `title`          | no       | Human-readable title. Defaults to `name`.                                                                                                                            |
+| `namespace`      | no       | App Platform namespace. Defaults to `default` (self-hosted) or `stacks-<stackId>` (cloud).                                                                           |
+| `stackId`        | no       | **Numeric** Grafana Cloud stack id (not the stack slug), used to derive the namespace (see below).                                                                   |
+| `apis`           | no       | Override or disable the API used per data type (see below).                                                                                                          |
+| `resolveFolders` | no       | `false` skips the `/api/folders` folder lookup (see below). Defaults to `true`.                                                                                      |
 
 ### API selection
 
@@ -147,8 +152,9 @@ to `true`; each can be set independently.
 - **`allowOnDemandRefresh`** — may API callers force live reads?
 
   - `true` (default): `?refresh=true` (also `?refresh=1` or the bare flag)
-    bypasses the store, and `POST /refresh` / `POST /instances/:name/refresh`
-    trigger immediate refreshes.
+    bypasses the store (on the panel routes: the panel cache), and
+    `POST /refresh` / `POST /instances/:name/refresh` trigger immediate
+    refreshes.
   - `false`: `refresh` query parameters are silently ignored (the request is
     served exactly as if the parameter were absent) and both `POST …/refresh`
     routes respond `403 NotAllowedError`. The scheduled refresh is unaffected.
@@ -201,6 +207,69 @@ is rejected at startup. Two ways to find the id:
   # → "stacks-1216502"  — the number is the stackId
   ```
 
+## Creating the Grafana service account and token
+
+Every request to Grafana is authenticated with a Grafana **service account
+token** — the `token` of the instance configuration. Create one per instance
+(creating service accounts requires a Grafana organization administrator):
+
+1. Sign in to the Grafana instance itself — for Grafana Cloud that is the
+   stack's own Grafana at `https://<stack>.grafana.net`, **not** the
+   grafana.com portal — and open **Administration → Users and access →
+   Service accounts**.
+2. Click **Add service account**, give it a recognizable display name (for
+   example `backstage`), and assign it the **Viewer** role (see
+   [required permissions](#required-permissions) for when you need more).
+3. On the new service account, click **Add service account token**, name the
+   token, preferably set an expiration date, and click **Generate token**.
+4. Copy the generated value — it starts with `glsa_` — into the instance's
+   `token` (via an environment variable or another secret source; never
+   commit it).
+
+> **Grafana Cloud:** the plugin needs a per-stack service-account token
+> (`glsa_…`) created inside the stack's Grafana as above. A Cloud _access
+> policy_ token from the grafana.com portal (`glc_…`) authenticates a
+> different API surface and will not work here.
+
+### Required permissions
+
+What the token needs depends on the features you use:
+
+| Feature (Grafana APIs called)                                                                               | Required access                                                                |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Dashboard listing and catalog discovery (`dashboard.grafana.app` list, `/api/search`)                       | `dashboards:read`                                                              |
+| Folder titles/links, i.e. `resolveFolders` (`/api/folders`)                                                 | `folders:read`                                                                 |
+| Alerts (`/api/prometheus/grafana/api/v1/rules`)                                                             | Grafana-managed alert-rule read (the `fixed:alerting.rules:reader` role)       |
+| Panel graphs (dashboard model read + `POST /api/ds/query`)                                                  | `dashboards:read` plus `datasources:query` on the queried data sources         |
+| [Scaffolder action](../scaffolder-backend-module-grafana/README.md) (`dashboard.grafana.app` create/update) | `dashboards:read` + `dashboards:create` (+ `dashboards:write` for `overwrite`) |
+
+In practice:
+
+- The **Viewer** basic role covers everything this plugin and the catalog
+  module read: dashboards, folders, and Grafana-managed alert rules — and, on
+  OSS Grafana (and any instance without data source permissions enforced),
+  the panel-data queries too, since viewers query data sources whenever they
+  view a dashboard.
+- On **Grafana Enterprise / Cloud with data source permissions**, the Viewer
+  basic role does not automatically include `datasources:query` on every data
+  source. If panel graphs fail with authorization errors, grant the service
+  account query access on the relevant data sources (or the RBAC
+  `fixed:datasources:reader` role), or disable the panel routes with
+  `grafana.allowPanelQueries: false`.
+- The **scaffolder module writes** dashboards: give that instance's service
+  account the **Editor** basic role, or (with RBAC) `fixed:dashboards:writer`
+  scoped to the folders your templates target.
+- An instance that serves fewer features needs fewer permissions — e.g. with
+  `apis.alerts: none` the alerting API is never called, so alert-rule read
+  access is unnecessary.
+
+To inspect exactly what a token is allowed to do, ask Grafana itself:
+
+```sh
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$BASE_URL/api/access-control/user/permissions" | jq
+```
+
 ## REST API
 
 All routes are mounted under `/api/grafana` and (except `/health`) require a
@@ -229,7 +298,9 @@ valid Backstage credential.
 - `labelSelector` — `key=value,key2=value2`; only alerts matching **all** pairs.
 - `instance` — (on `/dashboards` and `/alerts`) restrict to a single instance.
 - `refresh` — `true` or `1` (or the bare flag) to bypass the store and read
-  live from Grafana.
+  live from Grafana. On the panel routes it bypasses the panel cache
+  (`panelDataCacheTtl`) instead. Ignored when
+  `allowOnDemandRefresh: false`.
 - `from` / `to` — (on the panel data route) the query range, as Grafana time
   expressions: `now`, `now-<n><s|m|h|d|w>`, or epoch milliseconds. Default
   `now-6h` … `now`.
@@ -252,6 +323,11 @@ Each request resolves to a per-instance snapshot (all dashboards + all alerts):
 
 Because filtering happens after retrieval, a single cached snapshot serves many
 entities with different selectors, keeping Grafana API traffic low.
+
+A request that spans **all** instances (no instance in the path or query)
+skips — and logs — any instance that fails to load, so one unreachable
+Grafana cannot fail reads the other instances can still serve. Naming an
+instance explicitly surfaces its error instead.
 
 Panel listings and panel data are different: they are inherently live (a graph
 of a stale range is wrong, not cached), so they bypass the snapshot store

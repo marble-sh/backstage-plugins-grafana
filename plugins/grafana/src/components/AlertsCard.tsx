@@ -67,7 +67,9 @@ export const AlertsCard = () => {
         <List dense>
           {alerts.map(alert => (
             <ListItem
-              key={`${alert.instanceName}:${alert.folderTitle}:${alert.name}`}
+              key={`${alert.instanceName}:${
+                alert.uid ?? `${alert.folderTitle}:${alert.name}`
+              }`}
             >
               <ListItemText
                 primary={<Link to={alert.url}>{alert.name}</Link>}

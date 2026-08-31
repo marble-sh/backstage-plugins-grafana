@@ -313,6 +313,25 @@ describe('buildPanelQueries', () => {
     expect(queries[0].intervalMs).toBe(300_000);
     expect(queries[0].maxDataPoints).toBe(300);
   });
+
+  it('never assigns a fallback refId that another target declares', () => {
+    const { queries } = buildPanelQueries({
+      panel: {
+        id: 1,
+        datasource: { uid: 'ds-1' },
+        // The first target has no refId; a naive positional fallback would
+        // give it 'A', colliding with the second target's explicit 'A' —
+        // and Grafana keys `/api/ds/query` results by refId.
+        targets: [{ expr: 'up' }, { refId: 'A', expr: 'up' }, { expr: 'up' }],
+      },
+      model,
+      range: { from: 'now-1h', to: 'now' },
+    });
+
+    const refIds = queries.map(query => query.refId);
+    expect(refIds).toContain('A');
+    expect(new Set(refIds).size).toBe(refIds.length);
+  });
 });
 
 describe('normalizeFrames', () => {

@@ -21,7 +21,6 @@ import {
   ResourceEntity,
 } from '@backstage/catalog-model';
 import {
-  GRAFANA_ANNOTATION_DASHBOARD_SELECTOR,
   GRAFANA_ANNOTATION_DASHBOARD_UID,
   GRAFANA_ANNOTATION_INSTANCE,
   GrafanaDashboard,
@@ -159,7 +158,10 @@ export function buildGrafanaEntities(
           title: dashboard.title,
           annotations: {
             ...commonAnnotations,
-            [GRAFANA_ANNOTATION_DASHBOARD_SELECTOR]: dashboard.title,
+            // The uid alone selects the dashboard. A title-based selector is
+            // deliberately NOT emitted: selectors AND together, so a stale
+            // title (the dashboard renamed in Grafana since the last
+            // discovery run) would exclude the dashboard the uid matches.
             [GRAFANA_ANNOTATION_DASHBOARD_UID]: dashboard.uid,
           },
           links: [{ url: dashboard.url, title: 'Open dashboard' }],

@@ -18,8 +18,36 @@ import {
   coreServices,
   createBackendModule,
 } from '@backstage/backend-plugin-api';
+import { InputError } from '@backstage/errors';
 import { scaffolderActionsExtensionPoint } from '@backstage/plugin-scaffolder-node';
+import { Config } from '@backstage/config';
+import { readGrafanaInstances } from '@marble-sh/backstage-plugin-grafana-node';
 import { createGrafanaDashboardCreateAction } from './actions';
+
+/**
+ * Validates `grafana.scaffolder.allowedInstances` against `grafana.instances`
+ * at startup, so a configuration typo fails the backend boot (like the catalog
+ * module does) instead of every scaffolder run.
+ */
+function assertValidGuardConfig(rootConfig: Config): void {
+  const allowedInstances = rootConfig
+    .getOptionalConfig('grafana.scaffolder')
+    ?.getOptionalStringArray('allowedInstances');
+  if (!allowedInstances) {
+    return;
+  }
+  const known = new Set(
+    readGrafanaInstances(rootConfig).map(instance => instance.name),
+  );
+  const unknown = allowedInstances.filter(name => !known.has(name));
+  if (unknown.length > 0) {
+    throw new InputError(
+      `grafana.scaffolder.allowedInstances names unknown instance(s) '${unknown.join(
+        "', '",
+      )}'; configured instances are: ${[...known].join(', ')}`,
+    );
+  }
+}
 
 /**
  * Scaffolder backend module that registers Grafana provisioning actions.
@@ -36,6 +64,7 @@ export const scaffolderModuleGrafana = createBackendModule({
         config: coreServices.rootConfig,
       },
       async init({ scaffolder, config }) {
+        assertValidGuardConfig(config);
         scaffolder.addActions(createGrafanaDashboardCreateAction({ config }));
       },
     });

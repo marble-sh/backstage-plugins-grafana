@@ -254,7 +254,9 @@ export class GrafanaHttpClient implements GrafanaClient {
         }
         const summary = rule.annotations?.summary;
         const dashboardUid = rule.annotations?.[DASHBOARD_UID_ANNOTATION];
-        const panelId = Number(rule.annotations?.[PANEL_ID_ANNOTATION]);
+        // An empty annotation must not parse as panel 0 (Number('') === 0).
+        const rawPanelId = rule.annotations?.[PANEL_ID_ANNOTATION];
+        const panelId = rawPanelId ? Number(rawPanelId) : NaN;
         const activeAt = toActiveAt(rule.activeAt);
         alerts.push({
           name: rule.name ?? '',
@@ -332,11 +334,13 @@ export class GrafanaHttpClient implements GrafanaClient {
     const frames: unknown[] = [];
     for (const refId of Object.keys(results).sort()) {
       const entry = results[refId];
+      if (hiddenRefIds.includes(refId)) {
+        // A hidden query's series are never shown, so its failure is not
+        // worth a user-facing warning either.
+        continue;
+      }
       if (entry?.error) {
         warnings.push(`Query ${refId} failed: ${entry.error}`);
-      }
-      if (hiddenRefIds.includes(refId)) {
-        continue;
       }
       frames.push(...(Array.isArray(entry?.frames) ? entry.frames : []));
     }
@@ -356,14 +360,23 @@ export class GrafanaHttpClient implements GrafanaClient {
    * per-panel data queries reads the model only once.
    */
   private getDashboardModel(uid: string): Promise<Record<string, unknown>> {
+    const now = Date.now();
+    // Evict every expired entry, not just the requested one, so the cache
+    // stays bounded by the dashboards viewed within the TTL window rather
+    // than growing with every dashboard ever viewed.
+    for (const [key, entry] of this.modelCache) {
+      if (entry.expiresAt <= now) {
+        this.modelCache.delete(key);
+      }
+    }
     const cached = this.modelCache.get(uid);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (cached) {
       return cached.promise;
     }
     const promise = this.fetchDashboardModel(uid);
     this.modelCache.set(uid, {
       promise,
-      expiresAt: Date.now() + MODEL_CACHE_TTL_MS,
+      expiresAt: now + MODEL_CACHE_TTL_MS,
     });
     promise.catch(() => this.modelCache.delete(uid));
     return promise;

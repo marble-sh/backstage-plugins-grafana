@@ -18,9 +18,9 @@ Measured against
 this violates first normal form: the JSON columns hold non-atomic values
 containing repeating groups (each dashboard with a nested tag array, each alert
 with a label map). A normalized design would need roughly five tables —
-snapshots, dashboards, dashboard tags, alerts (with a surrogate key, since the
-Grafana-managed Prometheus rules API exposes no stable rule uid), and alert
-labels — plus transactional replace-on-refresh logic and join-based reads.
+snapshots, dashboards, dashboard tags, alerts (keyed by the rule uid where the
+rules API provides one, with a surrogate key as fallback), and alert labels —
+plus transactional replace-on-refresh logic and join-based reads.
 
 The store, however, is a **cache, not a system of record**. Grafana remains the
 source of truth; a snapshot is always written whole (one refresh per instance)

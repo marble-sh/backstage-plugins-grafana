@@ -119,6 +119,7 @@ export async function createRouter(options: {
     const items = await grafanaService.getPanels({
       instanceName: req.params.name,
       dashboardUid: req.params.uid,
+      refresh: toRefresh(req.query.refresh),
     });
     res.json({ items });
   });
@@ -143,6 +144,7 @@ export async function createRouter(options: {
         panelId: Number(req.params.panelId),
         from: toString(req.query.from),
         to: toString(req.query.to),
+        refresh: toRefresh(req.query.refresh),
       });
       res.json(data);
     },

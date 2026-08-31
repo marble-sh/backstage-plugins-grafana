@@ -101,6 +101,7 @@ describe('DashboardPanels', () => {
     expect(grafanaApi.listPanels).toHaveBeenCalledWith({
       instanceName: 'prod',
       dashboardUid: 'dash-1',
+      refresh: false,
     });
     expect(grafanaApi.getPanelData).toHaveBeenCalledTimes(2);
     expect(grafanaApi.getPanelData).toHaveBeenCalledWith({
@@ -109,6 +110,7 @@ describe('DashboardPanels', () => {
       panelId: 1,
       from: 'now-1h',
       to: 'now',
+      refresh: false,
     });
   });
 

@@ -18,7 +18,9 @@ desired, contributed upstream later.
 
 The frontend never talks to Grafana directly. All authentication, caching, and
 data-stitching live in the backend, which exposes a small read-only REST API
-that the other packages consume.
+for the frontend. The catalog and scaffolder modules run server-side and reach
+Grafana through the shared `grafana-node` client (as the diagram shows), using
+the same instance configuration and tokens.
 
 ```
                 +------------------------------+
@@ -73,6 +75,8 @@ grafana:
   instances:
     - name: production
       baseUrl: https://grafana.internal.example.com
+      # A Grafana service-account token; Viewer covers all read-only features.
+      # See the backend README for creation steps and exact permissions.
       token: ${GRAFANA_PROD_TOKEN}
 ```
 
@@ -91,9 +95,13 @@ metadata:
 ```
 
 See the [backend README](./plugins/grafana-backend/README.md) for the full
-configuration reference and REST API, and the
-[frontend README](./plugins/grafana/README.md) for wiring up either frontend
-system — and for the deliberate
+configuration reference, the REST API, and
+[how to create the Grafana service account and token](./plugins/grafana-backend/README.md#creating-the-grafana-service-account-and-token)
+with the exact permissions each feature needs. The
+[frontend README](./plugins/grafana/README.md) covers wiring up either frontend
+system, the
+[entity annotation reference](./plugins/grafana/README.md#entity-annotations),
+and the deliberate
 [differences from `@backstage-community/plugin-grafana`](./plugins/grafana/README.md#differences-from-backstage-communityplugin-grafana).
 
 ## Development

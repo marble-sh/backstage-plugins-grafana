@@ -84,6 +84,8 @@ export type GetPanelsOptions = {
   instanceName: string;
   /** The uid of the dashboard whose panels are listed. */
   dashboardUid: string;
+  /** Force a live read, bypassing the panel cache. */
+  refresh?: boolean;
 };
 
 /**
@@ -102,6 +104,8 @@ export type GetPanelDataOptions = {
   from?: string;
   /** Range end, same forms as `from`. Defaults to `now`. */
   to?: string;
+  /** Force a live read, bypassing the panel cache. */
+  refresh?: boolean;
 };
 
 /**
@@ -186,10 +190,11 @@ export class DefaultGrafanaService implements GrafanaService {
   async getDashboards(
     options: GetDashboardsOptions,
   ): Promise<GrafanaDashboard[]> {
-    const names = this.resolveNames(options.instanceName);
     const result: GrafanaDashboard[] = [];
-    for (const name of names) {
-      const snapshot = await this.snapshotFor(name, options.refresh);
+    for (const snapshot of await this.snapshotsFor(
+      options.instanceName,
+      options.refresh,
+    )) {
       result.push(
         ...filterDashboards(snapshot.dashboards, {
           tags: options.tags,
@@ -203,10 +208,11 @@ export class DefaultGrafanaService implements GrafanaService {
 
   /** {@inheritDoc GrafanaService.getAlerts} */
   async getAlerts(options: GetAlertsOptions): Promise<GrafanaAlert[]> {
-    const names = this.resolveNames(options.instanceName);
     const result: GrafanaAlert[] = [];
-    for (const name of names) {
-      const snapshot = await this.snapshotFor(name, options.refresh);
+    for (const snapshot of await this.snapshotsFor(
+      options.instanceName,
+      options.refresh,
+    )) {
       result.push(
         ...filterAlerts(snapshot.alerts, {
           labelSelector: options.labelSelector,
@@ -245,6 +251,7 @@ export class DefaultGrafanaService implements GrafanaService {
     return this.withPanelCache(
       `panels:v1:${options.instanceName}:${options.dashboardUid}`,
       () => client.getPanels!(options.dashboardUid),
+      options.refresh,
     );
   }
 
@@ -265,31 +272,55 @@ export class DefaultGrafanaService implements GrafanaService {
           from,
           to,
         }),
+      options.refresh,
     );
   }
 
   private async withPanelCache<T>(
     key: string,
     fn: () => Promise<T>,
+    refresh?: boolean,
   ): Promise<T> {
     if (!this.cache) {
       return fn();
     }
-    const cached = await this.cache.get(key);
-    if (cached !== undefined) {
-      return cached as T;
+    if (!refresh) {
+      const cached = await this.cache.get(key);
+      if (cached !== undefined) {
+        return cached as T;
+      }
     }
     const value = await fn();
     await this.cache.set(key, value as never, { ttl: this.panelCacheTtlMs });
     return value;
   }
 
-  private resolveNames(instanceName?: string): string[] {
+  /**
+   * Resolves the snapshots a read spans. A read of one named instance
+   * propagates that instance's failure; a fan-out over all instances skips
+   * (and logs) failing instances instead, so one unreachable Grafana cannot
+   * fail reads that other instances can still serve.
+   */
+  private async snapshotsFor(
+    instanceName: string | undefined,
+    refresh?: boolean,
+  ): Promise<Array<Pick<GrafanaSnapshot, 'dashboards' | 'alerts'>>> {
     if (instanceName) {
       this.mustGet(instanceName);
-      return [instanceName];
+      return [await this.snapshotFor(instanceName, refresh)];
     }
-    return [...this.instances.keys()];
+    const snapshots: Array<Pick<GrafanaSnapshot, 'dashboards' | 'alerts'>> = [];
+    for (const name of this.instances.keys()) {
+      try {
+        snapshots.push(await this.snapshotFor(name, refresh));
+      } catch (error) {
+        this.logger.warn(
+          `Failed to read Grafana instance '${name}'; skipping it for this request`,
+          error as Error,
+        );
+      }
+    }
+    return snapshots;
   }
 
   private mustGet(instanceName: string): GrafanaInstance {

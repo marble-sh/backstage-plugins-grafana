@@ -39,7 +39,10 @@ export class RedisGrafanaStore implements GrafanaStore {
 
 `GrafanaClient` is the read interface to a single Grafana instance. Implement
 it directly, or reuse `GrafanaHttpClient` with an injected `fetch` to add
-mTLS, an egress proxy, request logging, or recording:
+mTLS, an egress proxy, request logging, or recording. The panel methods
+(`getPanels`/`getPanelData`) are **optional** on the interface: a client
+without them stays valid, and the backend answers the panel routes with `404`
+for its instances:
 
 ```ts
 import { GrafanaHttpClient } from '@marble-sh/backstage-plugin-grafana-node';
@@ -178,7 +181,9 @@ scaffolder.addActions(
 
 The `grafana.scaffolder` guard rails (instance allow-list, overwrite toggle)
 apply to any action created through this factory, since they are read from
-config inside the handler.
+config inside the handler. (The stock module additionally validates
+`allowedInstances` against `grafana.instances` at backend startup; a custom
+module that only uses the factory gets the per-run validation.)
 
 ## Frontend
 
@@ -186,7 +191,9 @@ config inside the handler.
 
 Everything the UI renders flows through `grafanaApiRef`. Provide your own
 `GrafanaApi` implementation to change data fetching without touching a single
-component.
+component. Its panel methods (`listPanels`/`getPanelData`) are **optional** —
+an implementation without them still compiles, and the dashboards tab falls
+back to linking into Grafana instead of drawing graphs.
 
 Legacy frontend system — override the API in your app:
 

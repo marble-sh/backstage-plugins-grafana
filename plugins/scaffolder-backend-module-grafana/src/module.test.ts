@@ -41,4 +41,31 @@ describe('scaffolderModuleGrafana', () => {
       'grafana:dashboard:create',
     );
   });
+
+  it('fails startup when allowedInstances names an unknown instance', async () => {
+    const extensionPoint = { addActions: () => {} };
+
+    await expect(
+      startTestBackend({
+        extensionPoints: [[scaffolderActionsExtensionPoint, extensionPoint]],
+        features: [
+          scaffolderModuleGrafana,
+          mockServices.rootConfig.factory({
+            data: {
+              grafana: {
+                instances: [
+                  {
+                    name: 'prod',
+                    baseUrl: 'https://g.example.com',
+                    token: 't',
+                  },
+                ],
+                scaffolder: { allowedInstances: ['prod', 'nope'] },
+              },
+            },
+          }),
+        ],
+      }),
+    ).rejects.toThrow(/allowedInstances names unknown instance\(s\) 'nope'/);
+  });
 });

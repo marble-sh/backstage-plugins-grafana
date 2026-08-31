@@ -59,6 +59,14 @@ export const grafanaPlugin = createBackendPlugin({
           );
         }
 
+        if (grafanaConfig.store === 'database' && !grafanaConfig.schedule) {
+          logger.warn(
+            'grafana.store is `database` but no `grafana.schedule` is configured; ' +
+              'stored snapshots never expire, so data will only update on ' +
+              'explicit refreshes (`?refresh=true` or `POST …/refresh`)',
+          );
+        }
+
         const store: GrafanaStore =
           grafanaConfig.store === 'database'
             ? await DatabaseGrafanaStore.create({ database })

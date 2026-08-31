@@ -75,6 +75,8 @@ export type ListPanelsRequest = {
   instanceName: string;
   /** The uid of the dashboard whose panels are listed. */
   dashboardUid: string;
+  /** Force a live read, bypassing the backend's panel cache. */
+  refresh?: boolean;
 };
 
 /**
@@ -93,10 +95,16 @@ export type GetPanelDataRequest = {
   from?: string;
   /** Range end, same forms as `from`. Defaults to `now`. */
   to?: string;
+  /** Force a live read, bypassing the backend's panel cache. */
+  refresh?: boolean;
 };
 
 /**
  * A client for the Grafana backend REST API.
+ *
+ * The panel methods are optional so that custom implementations that predate
+ * them stay valid; the components render a link into Grafana when they are
+ * absent.
  *
  * @public
  */
@@ -108,9 +116,9 @@ export interface GrafanaApi {
   /** Lists alerts for one or all instances. */
   listAlerts(request?: ListAlertsRequest): Promise<GrafanaAlert[]>;
   /** Lists the panels of a single dashboard. */
-  listPanels(request: ListPanelsRequest): Promise<GrafanaPanel[]>;
+  listPanels?(request: ListPanelsRequest): Promise<GrafanaPanel[]>;
   /** Queries the data of a single panel over a time range. */
-  getPanelData(request: GetPanelDataRequest): Promise<GrafanaPanelData>;
+  getPanelData?(request: GetPanelDataRequest): Promise<GrafanaPanelData>;
 }
 
 /**
@@ -193,10 +201,15 @@ export class GrafanaApiClient implements GrafanaApi {
 
   /** {@inheritDoc GrafanaApi.listPanels} */
   async listPanels(request: ListPanelsRequest): Promise<GrafanaPanel[]> {
+    const params = new URLSearchParams();
+    if (request.refresh) {
+      params.set('refresh', 'true');
+    }
     const body = await this.get<ListPanelsResponse>(
       `/instances/${encodeURIComponent(
         request.instanceName,
       )}/dashboards/${encodeURIComponent(request.dashboardUid)}/panels`,
+      params,
     );
     return body.items;
   }
@@ -209,6 +222,9 @@ export class GrafanaApiClient implements GrafanaApi {
     }
     if (request.to) {
       params.set('to', request.to);
+    }
+    if (request.refresh) {
+      params.set('refresh', 'true');
     }
     return await this.get<GetPanelDataResponse>(
       `/instances/${encodeURIComponent(

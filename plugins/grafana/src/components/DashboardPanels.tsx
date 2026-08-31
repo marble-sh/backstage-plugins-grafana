@@ -23,6 +23,7 @@ import {
 import Box from '@material-ui/core/Box';
 import Grid from '@material-ui/core/Grid';
 import Typography from '@material-ui/core/Typography';
+import { useRef } from 'react';
 import useAsync from 'react-use/lib/useAsync';
 import { grafanaApiRef } from '../api';
 import { PanelChart } from './PanelChart';
@@ -34,6 +35,20 @@ export type PanelTimeRange = {
   to: string;
 };
 
+/**
+ * Tracks whether the current fetch was caused by a refresh-key bump (the
+ * refresh button) rather than the initial load or a range change, so only
+ * explicit refreshes bypass the backend's panel cache.
+ */
+const useIsRefresh = (refreshKey: number): (() => boolean) => {
+  const lastRefreshKey = useRef(refreshKey);
+  return () => {
+    const isRefresh = refreshKey !== lastRefreshKey.current;
+    lastRefreshKey.current = refreshKey;
+    return isRefresh;
+  };
+};
+
 const PanelDataCard = (props: {
   panel: GrafanaPanel;
   range: PanelTimeRange;
@@ -41,15 +56,17 @@ const PanelDataCard = (props: {
 }) => {
   const { panel, range, refreshKey } = props;
   const api = useApi(grafanaApiRef);
+  const isRefresh = useIsRefresh(refreshKey);
 
   const { value, loading, error } = useAsync(
-    () =>
-      api.getPanelData({
+    async () =>
+      api.getPanelData?.({
         instanceName: panel.instanceName,
         dashboardUid: panel.dashboardUid,
         panelId: panel.id,
         from: range.from,
         to: range.to,
+        refresh: isRefresh(),
       }),
     [
       panel.instanceName,
@@ -108,16 +125,26 @@ export const DashboardPanels = (props: {
 }) => {
   const { dashboard, range, refreshKey = 0 } = props;
   const api = useApi(grafanaApiRef);
+  const isRefresh = useIsRefresh(refreshKey);
 
   const { value, loading, error } = useAsync(
-    () =>
-      api.listPanels({
+    async () =>
+      api.listPanels?.({
         instanceName: dashboard.instanceName,
         dashboardUid: dashboard.uid,
+        refresh: isRefresh(),
       }),
     [dashboard.instanceName, dashboard.uid, refreshKey],
   );
 
+  if (!api.listPanels || !api.getPanelData) {
+    return (
+      <Typography variant="body2">
+        The configured Grafana API does not support panel rendering —{' '}
+        <Link to={dashboard.url}>open the dashboard in Grafana</Link>.
+      </Typography>
+    );
+  }
   if (loading) {
     return <Progress />;
   }
