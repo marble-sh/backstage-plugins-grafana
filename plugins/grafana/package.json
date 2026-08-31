@@ -39,7 +39,9 @@
     "@backstage/theme": "backstage:^",
     "@marble-sh/backstage-plugin-grafana-common": "workspace:^",
     "@material-ui/core": "^4.12.2",
-    "react-use": "^17.2.4"
+    "@material-ui/icons": "^4.11.3",
+    "react-use": "^17.2.4",
+    "recharts": "^3.10.1"
   },
   "peerDependencies": {
     "@types/react": "^17.0.0 || ^18.0.0",
@@ -62,6 +64,7 @@
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^15.0.0",
     "@testing-library/user-event": "^14.0.0",
+    "@types/lodash": "^4.14.151",
     "@types/react": "^18.0.0",
     "react": "^18.0.2",
     "react-dom": "^18.0.2",

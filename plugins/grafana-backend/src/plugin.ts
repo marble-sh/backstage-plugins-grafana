@@ -76,12 +76,15 @@ export const grafanaPlugin = createBackendPlugin({
           store,
           logger,
           fetchOnDemand: grafanaConfig.fetchOnDemand,
+          cache,
+          panelDataCacheTtl: grafanaConfig.panelDataCacheTtl,
         });
 
         httpRouter.use(
           await createRouter({
             grafanaService,
             allowOnDemandRefresh: grafanaConfig.allowOnDemandRefresh,
+            allowPanelQueries: grafanaConfig.allowPanelQueries,
           }),
         );
         httpRouter.addAuthPolicy({ path: '/health', allow: 'unauthenticated' });

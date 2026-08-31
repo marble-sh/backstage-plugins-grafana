@@ -52,9 +52,14 @@ export type GrafanaBackendConfig = {
   allowOnDemandRefresh: boolean;
   /** Whether a store miss triggers a live Grafana read. */
   fetchOnDemand: boolean;
+  /** Whether the panel routes (live dashboard/datasource queries) are served. */
+  allowPanelQueries: boolean;
+  /** Time-to-live for cached panel listings and panel data. */
+  panelDataCacheTtl: HumanDuration;
 };
 
 const DEFAULT_CACHE_TTL: HumanDuration = { minutes: 15 };
+const DEFAULT_PANEL_DATA_CACHE_TTL: HumanDuration = { seconds: 30 };
 
 /**
  * Reads and validates the `grafana` section of the app configuration into a
@@ -89,5 +94,9 @@ export function readGrafanaConfig(rootConfig: Config): GrafanaBackendConfig {
     allowOnDemandRefresh:
       config?.getOptionalBoolean('allowOnDemandRefresh') ?? true,
     fetchOnDemand: config?.getOptionalBoolean('fetchOnDemand') ?? true,
+    allowPanelQueries: config?.getOptionalBoolean('allowPanelQueries') ?? true,
+    panelDataCacheTtl:
+      (config?.getOptional('panelDataCacheTtl') as HumanDuration | undefined) ??
+      DEFAULT_PANEL_DATA_CACHE_TTL,
   };
 }

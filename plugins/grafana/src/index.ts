@@ -40,4 +40,6 @@ export type {
   GrafanaApi,
   ListDashboardsRequest,
   ListAlertsRequest,
+  ListPanelsRequest,
+  GetPanelDataRequest,
 } from './api';

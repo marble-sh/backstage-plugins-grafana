@@ -6,6 +6,8 @@
 import { Config } from '@backstage/config';
 import { GrafanaAlert } from '@marble-sh/backstage-plugin-grafana-common';
 import { GrafanaDashboard } from '@marble-sh/backstage-plugin-grafana-common';
+import { GrafanaPanel } from '@marble-sh/backstage-plugin-grafana-common';
+import { GrafanaPanelData } from '@marble-sh/backstage-plugin-grafana-common';
 import { parseLabelSelector } from '@marble-sh/backstage-plugin-grafana-common';
 
 // @public
@@ -36,7 +38,19 @@ export function filterDashboards(
 ): GrafanaDashboard[];
 
 // @public
+export type GetPanelDataOptions = {
+  from?: string;
+  to?: string;
+};
+
+// @public
 export interface GrafanaClient {
+  getPanelData?(
+    dashboardUid: string,
+    panelId: number,
+    options?: GetPanelDataOptions,
+  ): Promise<GrafanaPanelData>;
+  getPanels?(dashboardUid: string): Promise<GrafanaPanel[]>;
   listAlerts(options?: ListAlertsOptions): Promise<GrafanaAlert[]>;
   listDashboards(options?: ListDashboardsOptions): Promise<GrafanaDashboard[]>;
 }
@@ -44,6 +58,12 @@ export interface GrafanaClient {
 // @public
 export class GrafanaHttpClient implements GrafanaClient {
   constructor(options: { instance: GrafanaInstanceConfig; fetch?: FetchApi });
+  getPanelData(
+    dashboardUid: string,
+    panelId: number,
+    options?: GetPanelDataOptions,
+  ): Promise<GrafanaPanelData>;
+  getPanels(dashboardUid: string): Promise<GrafanaPanel[]>;
   listAlerts(options?: ListAlertsOptions): Promise<GrafanaAlert[]>;
   listDashboards(options?: ListDashboardsOptions): Promise<GrafanaDashboard[]>;
 }

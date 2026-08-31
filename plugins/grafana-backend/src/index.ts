@@ -28,6 +28,8 @@ export type {
   GrafanaInstance,
   GetDashboardsOptions,
   GetAlertsOptions,
+  GetPanelsOptions,
+  GetPanelDataOptions,
 } from './service/GrafanaService';
 export { DefaultGrafanaService } from './service/GrafanaService';
 

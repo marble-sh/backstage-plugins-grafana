@@ -9,7 +9,12 @@ has to depend on the other:
   Dashboards are read from the App Platform `dashboard.grafana.app/v1` API
   (or, opt-in, the classic `/api/search` endpoint), with folder titles and
   links resolved via `/api/folders`; alerts come from the Grafana-managed
-  Prometheus rules API. The `fetch` implementation is injectable for testing.
+  Prometheus rules API, enriched with rule uid, health, active instances, and
+  annotations. It can also read a single dashboard's model to list its panels
+  (`getPanels`) and query a panel's data (`getPanelData`) through
+  `POST /api/ds/query`, interpolating the dashboard's template variables from
+  their current values and normalizing the returned data frames into plain
+  time series. The `fetch` implementation is injectable for testing.
 - **`readGrafanaInstances` / `readGrafanaInstance`** — parse the shared
   `grafana.instances` configuration into resolved `GrafanaInstanceConfig`s,
   deriving the App Platform namespace for Grafana Cloud and self-hosted

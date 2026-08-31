@@ -10,6 +10,8 @@ import { FetchApi } from '@backstage/core-plugin-api';
 import { GrafanaAlert } from '@marble-sh/backstage-plugin-grafana-common';
 import { GrafanaDashboard } from '@marble-sh/backstage-plugin-grafana-common';
 import { GrafanaInstanceInfo } from '@marble-sh/backstage-plugin-grafana-common';
+import { GrafanaPanel } from '@marble-sh/backstage-plugin-grafana-common';
+import { GrafanaPanelData } from '@marble-sh/backstage-plugin-grafana-common';
 import { JSX as JSX_2 } from 'react';
 import { RouteRef } from '@backstage/core-plugin-api';
 
@@ -26,18 +28,31 @@ export const EntityGrafanaDashboardsCard: () => JSX_2.Element;
 export const EntityGrafanaDashboardsContent: () => JSX_2.Element;
 
 // @public
+export type GetPanelDataRequest = {
+  instanceName: string;
+  dashboardUid: string;
+  panelId: number;
+  from?: string;
+  to?: string;
+};
+
+// @public
 export interface GrafanaApi {
+  getPanelData(request: GetPanelDataRequest): Promise<GrafanaPanelData>;
   listAlerts(request?: ListAlertsRequest): Promise<GrafanaAlert[]>;
   listDashboards(request?: ListDashboardsRequest): Promise<GrafanaDashboard[]>;
   listInstances(): Promise<GrafanaInstanceInfo[]>;
+  listPanels(request: ListPanelsRequest): Promise<GrafanaPanel[]>;
 }
 
 // @public
 export class GrafanaApiClient implements GrafanaApi {
   constructor(options: { discoveryApi: DiscoveryApi; fetchApi: FetchApi });
+  getPanelData(request: GetPanelDataRequest): Promise<GrafanaPanelData>;
   listAlerts(request?: ListAlertsRequest): Promise<GrafanaAlert[]>;
   listDashboards(request?: ListDashboardsRequest): Promise<GrafanaDashboard[]>;
   listInstances(): Promise<GrafanaInstanceInfo[]>;
+  listPanels(request: ListPanelsRequest): Promise<GrafanaPanel[]>;
 }
 
 // @public
@@ -69,6 +84,12 @@ export type ListDashboardsRequest = {
   query?: string;
   uid?: string;
   refresh?: boolean;
+};
+
+// @public
+export type ListPanelsRequest = {
+  instanceName: string;
+  dashboardUid: string;
 };
 
 // @public

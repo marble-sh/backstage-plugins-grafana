@@ -11,19 +11,45 @@ stay in the backend.
 
 ## What it provides
 
-| Feature                                | Legacy system export             | New system extension                |
-| -------------------------------------- | -------------------------------- | ----------------------------------- |
-| Standalone `/grafana` instances page   | `GrafanaPage`                    | `page:grafana`                      |
-| Entity overview card: dashboards       | `EntityGrafanaDashboardsCard`    | `entity-card:grafana/dashboards`    |
-| Entity overview card: alerts           | `EntityGrafanaAlertsCard`        | `entity-card:grafana/alerts`        |
-| Entity tab (`/grafana`): dashboards    | `EntityGrafanaDashboardsContent` | `entity-content:grafana/dashboards` |
-| Entity tab (`/grafana-alerts`): alerts | `EntityGrafanaAlertsContent`     | `entity-content:grafana/alerts`     |
-| API client for `/api/grafana/*`        | `grafanaApiRef`                  | `api:grafana`                       |
+| Feature                                     | Legacy system export             | New system extension                |
+| ------------------------------------------- | -------------------------------- | ----------------------------------- |
+| Standalone `/grafana` instances page        | `GrafanaPage`                    | `page:grafana`                      |
+| Entity overview card: dashboards            | `EntityGrafanaDashboardsCard`    | `entity-card:grafana/dashboards`    |
+| Entity overview card: alerts                | `EntityGrafanaAlertsCard`        | `entity-card:grafana/alerts`        |
+| Entity tab (`/grafana`): dashboard graphs   | `EntityGrafanaDashboardsContent` | `entity-content:grafana/dashboards` |
+| Entity tab (`/grafana-alerts`): alert table | `EntityGrafanaAlertsContent`     | `entity-content:grafana/alerts`     |
+| API client for `/api/grafana/*`             | `grafanaApiRef`                  | `api:grafana`                       |
 
-Dashboards render with their tags and a link to the containing folder (when the
-folder is known); alerts render with a state chip colored by severity. In the
-new frontend system the entity cards and tabs are only attached to entities that
-carry a relevant Grafana annotation, so they never appear on unrelated entities.
+The overview **cards** stay lightweight: dashboards render with their tags and
+a link to the containing folder (when the folder is known); alerts render with
+a state chip colored by severity. In the new frontend system the entity cards
+and tabs are only attached to entities that carry a relevant Grafana
+annotation, so they never appear on unrelated entities.
+
+### The dashboards tab renders real graphs
+
+The **Grafana Dashboards** tab draws the selected dashboards' panels as live
+charts, queried through the backend (which reads the dashboard model and
+proxies Grafana's datasource query API — the browser never talks to Grafana):
+
+- One expandable section per matched dashboard; the first is expanded, the
+  rest fetch their panels lazily on expand. Each section links into Grafana.
+- `timeseries` and legacy `graph` panels render as line charts; `stat`,
+  `gauge`, and `singlestat` panels render as single-value tiles showing the
+  latest value. Other panel types are counted and linked into Grafana.
+- A shared time-range picker (15 minutes to 7 days, default 6 hours) and a
+  refresh button re-query the visible panels.
+- Dashboard template variables are resolved with their **dashboard default**
+  values; targets whose datasource cannot be resolved (dashboard-default
+  datasources, unset datasource variables) are skipped with a visible note.
+- Charts draw at most 8 series, in a fixed colorblind-safe palette validated
+  for both Backstage themes; a note points to Grafana when series are cut.
+
+### The alerts tab is a live table
+
+The **Grafana Alerts** tab lists the selected alert rules with their state and
+health, how long they have been active, the number of active instances, and
+the rule's `summary` annotation — each deep-linked to the rule in Grafana.
 
 ## Entity annotations
 
@@ -144,8 +170,12 @@ you are migrating from the community plugin, note these deliberate differences:
 - **Instance selection:** instances are addressed by the `grafana/instance`
   annotation against named entries in `grafana.instances`, rather than the
   community plugin's host-based configuration.
-- **`grafana/overview-dashboard` is not supported** (no embedded dashboard
-  viewer yet). Entities carrying it will simply not get an embed.
+- **Graphs are rendered from data, not embedded.** The community plugin lists
+  dashboards and alerts as links and can only embed a dashboard via an iframe
+  (`grafana/overview-dashboard`, which requires the browser to reach Grafana).
+  Here the dashboards tab draws the panels as real charts from data queried
+  through the backend, and `grafana/overview-dashboard` is **not supported**
+  (entities carrying it simply do not get an embed).
 
 ## Local development
 

@@ -36,12 +36,17 @@ function stubService(overrides: Partial<GrafanaService> = {}): {
 
 async function makeApp(
   service: GrafanaService,
-  options: { allowOnDemandRefresh?: boolean } = {},
+  options: { allowOnDemandRefresh?: boolean; allowPanelQueries?: boolean } = {},
 ) {
   const app = express();
   app.use(await createRouter({ grafanaService: service, ...options }));
   // Minimal stand-in for the backend's error middleware: map error names to
-  // statuses the way the real app does (NotAllowedError -> 403).
+  // statuses the way the real app does (NotAllowedError -> 403, ...).
+  const statuses: Record<string, number> = {
+    NotAllowedError: 403,
+    NotFoundError: 404,
+    InputError: 400,
+  };
   app.use(
     (
       err: Error,
@@ -49,9 +54,7 @@ async function makeApp(
       res: express.Response,
       _next: express.NextFunction,
     ) => {
-      res
-        .status(err.name === 'NotAllowedError' ? 403 : 500)
-        .json({ error: err.name });
+      res.status(statuses[err.name] ?? 500).json({ error: err.name });
     },
   );
   return app;
@@ -251,6 +254,120 @@ describe('createRouter', () => {
       expect(getDashboards).toHaveBeenCalledWith(
         expect.objectContaining({ query: 'foo', refresh: false }),
       );
+    });
+  });
+
+  describe('panel routes', () => {
+    const panel = {
+      id: 1,
+      title: 'Requests',
+      type: 'timeseries',
+      kind: 'timeseries',
+      dashboardUid: 'd1',
+      instanceName: 'prod',
+    };
+
+    it('GET .../panels lists the panels of a dashboard', async () => {
+      const getPanels = jest.fn().mockResolvedValue([panel]);
+      const { service } = stubService({ getPanels });
+      const app = await makeApp(service);
+
+      const res = await request(app).get(
+        '/instances/prod/dashboards/d1/panels',
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ items: [panel] });
+      expect(getPanels).toHaveBeenCalledWith({
+        instanceName: 'prod',
+        dashboardUid: 'd1',
+      });
+    });
+
+    it('GET .../panels/:panelId/data queries a panel with a range', async () => {
+      const data = { panelId: 3, series: [] };
+      const getPanelData = jest.fn().mockResolvedValue(data);
+      const { service } = stubService({ getPanelData });
+      const app = await makeApp(service);
+
+      const res = await request(app)
+        .get('/instances/prod/dashboards/d1/panels/3/data')
+        .query('from=now-1h&to=now');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(data);
+      expect(getPanelData).toHaveBeenCalledWith({
+        instanceName: 'prod',
+        dashboardUid: 'd1',
+        panelId: 3,
+        from: 'now-1h',
+        to: 'now',
+      });
+    });
+
+    it('omits absent range parameters', async () => {
+      const getPanelData = jest
+        .fn()
+        .mockResolvedValue({ panelId: 3, series: [] });
+      const { service } = stubService({ getPanelData });
+      const app = await makeApp(service);
+
+      await request(app).get('/instances/prod/dashboards/d1/panels/3/data');
+
+      expect(getPanelData).toHaveBeenCalledWith({
+        instanceName: 'prod',
+        dashboardUid: 'd1',
+        panelId: 3,
+        from: undefined,
+        to: undefined,
+      });
+    });
+
+    it('rejects a non-integer panel id with 400', async () => {
+      const getPanelData = jest.fn();
+      const { service } = stubService({ getPanelData });
+      const app = await makeApp(service);
+
+      const res = await request(app).get(
+        '/instances/prod/dashboards/d1/panels/nope/data',
+      );
+
+      expect(res.status).toBe(400);
+      expect(getPanelData).not.toHaveBeenCalled();
+    });
+
+    it('responds 404 when the service has no panel support', async () => {
+      const { service } = stubService();
+      const app = await makeApp(service);
+
+      const panelsRes = await request(app).get(
+        '/instances/prod/dashboards/d1/panels',
+      );
+      const dataRes = await request(app).get(
+        '/instances/prod/dashboards/d1/panels/1/data',
+      );
+
+      expect(panelsRes.status).toBe(404);
+      expect(dataRes.status).toBe(404);
+    });
+
+    it('responds 403 on both routes when panel queries are disabled', async () => {
+      const getPanels = jest.fn();
+      const getPanelData = jest.fn();
+      const { service } = stubService({ getPanels, getPanelData });
+      const app = await makeApp(service, { allowPanelQueries: false });
+
+      const panelsRes = await request(app).get(
+        '/instances/prod/dashboards/d1/panels',
+      );
+      const dataRes = await request(app).get(
+        '/instances/prod/dashboards/d1/panels/1/data',
+      );
+
+      expect(panelsRes.status).toBe(403);
+      expect(dataRes.status).toBe(403);
+      expect(getPanels).not.toHaveBeenCalled();
+      expect(getPanelData).not.toHaveBeenCalled();
     });
   });
 });

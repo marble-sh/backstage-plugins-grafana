@@ -39,6 +39,55 @@ const config = {
 function mockGrafanaFetch() {
   return jest.spyOn(global, 'fetch').mockImplementation(async (input: any) => {
     const url = String(input);
+    if (url.includes('/api/ds/query')) {
+      return new Response(
+        JSON.stringify({
+          results: {
+            A: {
+              status: 200,
+              frames: [
+                {
+                  schema: {
+                    refId: 'A',
+                    fields: [
+                      { name: 'time', type: 'time' },
+                      { name: 'Value', type: 'number' },
+                    ],
+                  },
+                  data: {
+                    values: [
+                      [1000, 2000],
+                      [1, 2],
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    if (url.includes('/dashboards/abc')) {
+      return new Response(
+        JSON.stringify({
+          metadata: { name: 'abc' },
+          spec: {
+            title: 'My Dashboard',
+            panels: [
+              {
+                id: 1,
+                type: 'timeseries',
+                title: 'Requests',
+                datasource: { uid: 'prom-1', type: 'prometheus' },
+                targets: [{ refId: 'A', expr: 'up' }],
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
     if (url.includes('/apis/dashboard.grafana.app/')) {
       return new Response(
         JSON.stringify({
@@ -161,6 +210,72 @@ describe('grafanaPlugin', () => {
         instanceName: 'prod',
       },
     ]);
+  });
+
+  it('lists panels and serves panel data live from Grafana', async () => {
+    mockGrafanaFetch();
+    const server = await startBackend();
+    const auth = mockCredentials.user.header();
+
+    const panels = await request(server)
+      .get('/api/grafana/instances/prod/dashboards/abc/panels')
+      .set('Authorization', auth);
+    expect(panels.status).toBe(200);
+    expect(panels.body.items).toEqual([
+      {
+        id: 1,
+        title: 'Requests',
+        type: 'timeseries',
+        kind: 'timeseries',
+        dashboardUid: 'abc',
+        instanceName: 'prod',
+      },
+    ]);
+
+    const data = await request(server)
+      .get('/api/grafana/instances/prod/dashboards/abc/panels/1/data')
+      .query('from=now-1h&to=now')
+      .set('Authorization', auth);
+    expect(data.status).toBe(200);
+    expect(data.body).toEqual({
+      panelId: 1,
+      series: [
+        {
+          name: 'Value',
+          points: [
+            { timeMs: 1000, value: 1 },
+            { timeMs: 2000, value: 2 },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('rejects the panel routes with 403 when panel queries are off', async () => {
+    const fetchSpy = mockGrafanaFetch();
+    const { server } = await startTestBackend({
+      features: [
+        grafanaPlugin,
+        mockServices.rootConfig.factory({
+          data: {
+            grafana: { ...config.grafana, allowPanelQueries: false },
+          },
+        }),
+      ],
+    });
+    const auth = mockCredentials.user.header();
+
+    const panels = await request(server)
+      .get('/api/grafana/instances/prod/dashboards/abc/panels')
+      .set('Authorization', auth);
+    const data = await request(server)
+      .get('/api/grafana/instances/prod/dashboards/abc/panels/1/data')
+      .set('Authorization', auth);
+
+    expect(panels.status).toBe(403);
+    expect(data.status).toBe(403);
+    expect(panels.body.error.message).toMatch(/allowPanelQueries/);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('boots with the database store and serves snapshots from it', async () => {

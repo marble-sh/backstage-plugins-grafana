@@ -18,6 +18,9 @@ export const getDashboardUid: (entity: Entity) => string | undefined;
 export const getGrafanaInstanceName: (entity: Entity) => string | undefined;
 
 // @public
+export type GetPanelDataResponse = GrafanaPanelData;
+
+// @public
 export const getTagSelector: (entity: Entity) => string | undefined;
 
 // @public
@@ -45,7 +48,17 @@ export type GrafanaAlert = {
   labels: Record<string, string>;
   folderTitle?: string;
   instanceName: string;
+  uid?: string;
+  health?: GrafanaAlertHealth;
+  summary?: string;
+  activeAt?: string;
+  activeCount?: number;
+  dashboardUid?: string;
+  panelId?: number;
 };
+
+// @public
+export type GrafanaAlertHealth = 'ok' | 'error' | 'nodata' | 'unknown';
 
 // @public
 export type GrafanaAlertState =
@@ -76,6 +89,40 @@ export type GrafanaInstanceInfo = {
 };
 
 // @public
+export type GrafanaPanel = {
+  id: number;
+  title: string;
+  type: string;
+  kind: GrafanaPanelKind;
+  description?: string;
+  dashboardUid: string;
+  instanceName: string;
+};
+
+// @public
+export type GrafanaPanelData = {
+  panelId: number;
+  series: GrafanaPanelSeries[];
+  warnings?: string[];
+};
+
+// @public
+export type GrafanaPanelKind = 'timeseries' | 'stat' | 'unsupported';
+
+// @public
+export type GrafanaPanelPoint = {
+  timeMs: number;
+  value: number | null;
+};
+
+// @public
+export type GrafanaPanelSeries = {
+  name: string;
+  labels?: Record<string, string>;
+  points: GrafanaPanelPoint[];
+};
+
+// @public
 export const isAlertsAvailable: (entity: Entity) => boolean;
 
 // @public
@@ -97,6 +144,11 @@ export type ListDashboardsResponse = {
 // @public
 export type ListInstancesResponse = {
   items: GrafanaInstanceInfo[];
+};
+
+// @public
+export type ListPanelsResponse = {
+  items: GrafanaPanel[];
 };
 
 // @public

@@ -28,14 +28,28 @@ describe('readGrafanaConfig', () => {
     expect(result.schedule).toBeUndefined();
     expect(result.allowOnDemandRefresh).toBe(true);
     expect(result.fetchOnDemand).toBe(true);
+    expect(result.allowPanelQueries).toBe(true);
+    expect(result.panelDataCacheTtl).toEqual({ seconds: 30 });
   });
 
   it('reads the on-demand flags', () => {
     const result = read({
-      grafana: { allowOnDemandRefresh: false, fetchOnDemand: false },
+      grafana: {
+        allowOnDemandRefresh: false,
+        fetchOnDemand: false,
+        allowPanelQueries: false,
+      },
     });
     expect(result.allowOnDemandRefresh).toBe(false);
     expect(result.fetchOnDemand).toBe(false);
+    expect(result.allowPanelQueries).toBe(false);
+  });
+
+  it('reads the panel data cache ttl', () => {
+    const result = read({
+      grafana: { panelDataCacheTtl: { minutes: 2 } },
+    });
+    expect(result.panelDataCacheTtl).toEqual({ minutes: 2 });
   });
 
   it('includes the configured instances', () => {
