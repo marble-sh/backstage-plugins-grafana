@@ -34,6 +34,8 @@ are sanitized to satisfy catalog validation — names that would exceed 63
 characters, and dashboard uids containing uppercase characters, get a short
 stable hash appended to stay unique.
 
+![marble.sh-catalog-type-dashboard.png](docs/images/marble.sh-catalog-type-dashboard.png)
+
 ## Installation
 
 ```sh

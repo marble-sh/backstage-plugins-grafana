@@ -1,0 +1,61 @@
+# Example catalog-info.yaml using every Grafana annotation, with values
+# validated against a real Grafana Cloud stack (all five are optional —
+# see the frontend README's "Entity annotations" section for semantics).
+#
+# PREREQUISITE: `grafana/instance` matches the `name` of an entry under
+# `grafana.instances` in the Backstage app config — it is a config-side
+# alias, NOT the Grafana hostname, stack slug, or stack id. This example
+# assumes the app config contains:
+#
+#   grafana:
+#     instances:
+#       - name: radiantsalad
+#         stackId: '1811394'
+#         baseUrl: https://radiantsalad3234.grafana.net
+#         token: ${GRAFANA_SA_TOKEN}
+#
+# An unmatched name fails loudly with
+# "404 No Grafana instance configured with name '…'" — by design, so typos
+# don't render as a silently empty tab. `GET /api/grafana/instances` lists
+# the configured names.
+#
+# The dashboard annotations AND together, so as written the dashboards tab
+# shows exactly one dashboard ("Usage Insights - 1 - Overview"): it has the
+# uid, carries the tag, and its title matches the selector. Loosen the
+# selection by removing annotations — each one alone selects more.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: usage-insights-example
+  description: >-
+    Demonstrates every grafana/* annotation against the radiantsalad3234
+    Grafana Cloud stack.
+  annotations:
+    # The `name` of an instance under grafana.instances. Omit to query all
+    # configured instances. Alone, it selects everything on the instance:
+    # every dashboard and every alert rule.
+    grafana/instance: radiantsalad
+
+    # Case-insensitive title substrings, comma-separated, OR-matched:
+    # "usage insights" matches the six Usage Insights dashboards, "billing"
+    # matches "Billing/Usage".
+    grafana/dashboard-selector: usage insights, billing
+
+    # Grafana dashboard tags, comma-separated, AND-matched (exact tags):
+    # selects the Grafana-Cloud-provisioned dashboards tagged `grafanacloud`.
+    grafana/tag-selector: grafanacloud
+
+    # Exact, case-sensitive dashboard uid — at most one dashboard. This is
+    # the uid of "Usage Insights - 1 - Overview". Catalog discovery writes
+    # this annotation onto every dashboard Resource it emits.
+    grafana/dashboard-uid: XU8HAD5Gk
+
+    # key=value pairs, comma-separated, AND-matched against alert rule
+    # labels: selects the four "Integration - Linux Node" alert rules
+    # (High CPU usage, High memory usage, Instance down, Low disk space),
+    # which all carry the label `for: linux`.
+    grafana/alert-label-selector: for=linux
+spec:
+  type: service
+  lifecycle: experimental
+  owner: user:default/marble-sh

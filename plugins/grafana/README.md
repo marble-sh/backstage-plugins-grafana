@@ -9,6 +9,8 @@ companion [`@marble-sh/backstage-plugin-grafana-backend`](../grafana-backend/REA
 REST API — it never contacts Grafana directly, so all credentials and caching
 stay in the backend.
 
+![backstage-plugin-grafana-dashboards.png](docs/images/backstage-plugin-grafana-dashboards.png)
+
 ## What it provides
 
 | Feature                                     | Legacy system export             | New system extension                |
@@ -47,6 +49,8 @@ proxies Grafana's datasource query API — the browser never talks to Grafana):
   for both Backstage themes; a note points to Grafana when series are cut.
 
 ### The alerts tab is a live table
+
+![backstage-plugin-grafana-alerts.png](docs/images/backstage-plugin-grafana-alerts.png)
 
 The **Grafana Alerts** tab lists the selected alert rules with their state and
 health, how long they have been active, the number of active instances, and
@@ -204,6 +208,65 @@ you are migrating from the community plugin, note these deliberate differences:
   Here the dashboards tab draws the panels as real charts from data queried
   through the backend, and `grafana/overview-dashboard` is **not supported**
   (entities carrying it simply do not get an embed).
+
+## FAQ
+
+### Why do my dashboards only show "template variable '$…' has no saved value"?
+
+Because the dashboard's template variables have no **saved** selection.
+Grafana's own UI evaluates variables every time a dashboard loads (running
+their queries and picking a value in the browser), so the stored dashboard
+JSON routinely carries `current: null` for every variable. The backend can
+only interpolate queries from what is stored — Grafana has no server-side
+interpolation API — so a target that still references a valueless variable
+is skipped with this warning rather than sent to the datasource, which would
+reject the raw `$var` text with a parse error.
+
+To fix it, save default values into the dashboard, per dashboard:
+
+1. Open the dashboard in Grafana and pick a sensible value for every
+   variable in the top bar (a concrete value, or "All" where enabled).
+2. Save the dashboard with the **"Save current variable values as dashboard
+   default"** checkbox ticked in the save dialog. This is what writes the
+   selection into the stored JSON — a plain save does not.
+3. Verify under Dashboard settings → **JSON Model**: every
+   `templating.list[]` entry should now have a populated `current.value`.
+   The entity tab picks the change up within the backend's ~30s model cache.
+
+Caveats:
+
+- **Provisioned dashboards can't be saved** (the stock Grafana Cloud and
+  integration dashboards are provisioning-managed). Use **Save As** to make
+  an editable copy — the copy stores your variable values — then select the
+  copy from your entities (by tag or `grafana/dashboard-uid`).
+- **"All" on a multi-value variable** interpolates to a pipe-joined regex
+  (or the variable's custom `allValue`). That is valid inside regex matchers
+  like `{job=~"$job"}` but invalid PromQL in unquoted positions (metric
+  names, `by ($var)`) — exactly as in Grafana's own UI. For those, save a
+  single value or set an `allValue` that is valid where the variable is
+  used.
+- **Interval variables on "Auto"** and **datasource variables** need no
+  saved value: the backend substitutes the computed query interval for
+  `$__auto_interval_*`, and defaults a valueless datasource variable to the
+  instance's first datasource of the variable's declared type. A saved
+  selection always wins over these defaults.
+
+### Why does a panel warn "its datasource could not be resolved"?
+
+The target's datasource reference cannot be mapped to a queryable datasource
+of the instance. Most commonly the panel selects its datasource through a
+datasource-type variable whose declared plugin type has no match in
+`GET /api/datasources` — including app-plugin datasources (for example
+`grafana-incident-datasource`), which Grafana does not expose through that
+API at all; such panels cannot be queried from outside the Grafana frontend.
+
+### Why does a query fail with `parse error: unexpected character '|'`?
+
+A multi-value variable selection was interpolated into a position where a
+pipe-joined value is not valid query syntax (see the "All" caveat above).
+The interpolated text matches what Grafana's own frontend would produce for
+that saved selection — the panel is broken for that selection in the Grafana
+UI too. Save a single value, or set a custom `allValue`.
 
 ## Local development
 
