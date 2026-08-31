@@ -22,39 +22,35 @@ for the frontend. The catalog and scaffolder modules run server-side and reach
 Grafana through the shared `grafana-node` client (as the diagram shows), using
 the same instance configuration and tokens.
 
-```
-                +------------------------------+
-   Grafana <----|  grafana-backend (REST API)  |----> cache / database
-     ^          |  - Grafana HTTP client       |
-     |          |  - store + scheduled refresh |
-     |          +---------------+--------------+
-     |                          | /api/grafana
-     |                +---------v----------+
-     |                |  grafana (frontend)|
-     |                |  entity tabs/cards |
-     |                |  + standalone page |
-     |                +--------------------+
-     |
-     |          +-------------------------------+
-     +----------| catalog-backend-module-grafana|
-                | auto-discovers instances &    |
-                | dashboards as catalog entities|
-                +-------------------------------+
+```mermaid
+flowchart TB
+    frontend["<b>grafana</b> (frontend)<br/>entity tabs: live panel graphs, alert table<br/>overview cards + standalone page"]
+    backend["<b>grafana-backend</b> (REST API)<br/>Grafana HTTP client, snapshot store,<br/>scheduled refresh, live panel queries"]
+    catalog["<b>catalog-backend-module-grafana</b><br/>auto-discovers instances and dashboards<br/>as catalog entities"]
+    store[("cache / database")]
+    grafana["Grafana<br/>(Cloud or self-hosted)"]
 
-  grafana-node  = shared Grafana HTTP client + instance config (backend + module)
-  grafana-common = shared entity annotations + data-transfer types (all packages)
+    frontend -->|"/api/grafana"| backend
+    backend -->|"dashboards, alerts, panel data"| grafana
+    backend -->|"snapshots"| store
+    catalog -->|"discovers"| grafana
 ```
+
+Two shared libraries underpin the boxes above: `grafana-node` (the Grafana
+HTTP client and instance config, used by the backend and the catalog module)
+and `grafana-common` (the entity annotations and data-transfer types, used by
+every package).
 
 ## Packages
 
-| Package                                                                                                        | Status   | Description                                                                 |
-| -------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------- |
-| [`@marble-sh/backstage-plugin-grafana-common`](./plugins/grafana-common)                                       | ✅ ready | Shared entity annotations and data-transfer types.                          |
-| [`@marble-sh/backstage-plugin-grafana-node`](./plugins/grafana-node)                                           | ✅ ready | Shared Grafana HTTP client, instance config reader, and filters.            |
-| [`@marble-sh/backstage-plugin-grafana-backend`](./plugins/grafana-backend)                                     | ✅ ready | REST API, Grafana client, caching store, and scheduled refresh.             |
-| [`@marble-sh/backstage-plugin-grafana`](./plugins/grafana)                                                     | ✅ ready | Frontend (legacy + new system): entity cards/content and a standalone page. |
-| [`@marble-sh/backstage-plugin-catalog-backend-module-grafana`](./plugins/catalog-backend-module-grafana)       | ✅ ready | Auto-discovers Grafana instances and dashboards as catalog entities.        |
-| [`@marble-sh/backstage-plugin-scaffolder-backend-module-grafana`](./plugins/scaffolder-backend-module-grafana) | ✅ ready | Scaffolder action to provision Grafana dashboards.                          |
+| Package                                                                                                        | Description                                                                 |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [`@marble-sh/backstage-plugin-grafana-common`](./plugins/grafana-common)                                       | Shared entity annotations and data-transfer types.                          |
+| [`@marble-sh/backstage-plugin-grafana-node`](./plugins/grafana-node)                                           | Shared Grafana HTTP client, instance config reader, and filters.            |
+| [`@marble-sh/backstage-plugin-grafana-backend`](./plugins/grafana-backend)                                     | REST API, Grafana client, caching store, and scheduled refresh.             |
+| [`@marble-sh/backstage-plugin-grafana`](./plugins/grafana)                                                     | Frontend (legacy + new system): entity cards/content and a standalone page. |
+| [`@marble-sh/backstage-plugin-catalog-backend-module-grafana`](./plugins/catalog-backend-module-grafana)       | Auto-discovers Grafana instances and dashboards as catalog entities.        |
+| [`@marble-sh/backstage-plugin-scaffolder-backend-module-grafana`](./plugins/scaffolder-backend-module-grafana) | Scaffolder action to provision Grafana dashboards.                          |
 
 ## Quickstart
 
@@ -90,9 +86,13 @@ yarn --cwd packages/app add @marble-sh/backstage-plugin-grafana
 # catalog-info.yaml
 metadata:
   annotations:
-    grafana/instance: production
+    grafana/instance: production # Must match grafana.instances[].name
     grafana/tag-selector: my-team
 ```
+
+See the [example catalog-info.yaml file](docs/examples/catalog-info.yaml)
+
+![usage-insights-example.png](docs/examples/usage-insights-example.png)
 
 See the [backend README](./plugins/grafana-backend/README.md) for the full
 configuration reference, the REST API, and
