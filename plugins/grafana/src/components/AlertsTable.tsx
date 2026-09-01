@@ -61,21 +61,14 @@ const columns: TableColumn<GrafanaAlert>[] = [
     align: 'right',
     width: '8%',
   },
-  {
-    title: 'Summary',
-    field: 'summary',
-    render: alert => (
-      <Typography variant="body2" color="textSecondary">
-        {alert.summary}
-      </Typography>
-    ),
-  },
 ];
 
 /**
  * A table of Grafana alert rules with their live state: state and health,
- * a deep link to the rule, its folder, how long it has been active, the
- * number of active instances, and the summary annotation.
+ * a deep link to the rule, its folder, how long it has been active, and the
+ * number of active instances. The rule's `summary` annotation is deliberately
+ * not shown: the rules API returns it as an unrendered Go template
+ * (`{{ $values.B }}`…), which reads as noise.
  *
  * @public
  */

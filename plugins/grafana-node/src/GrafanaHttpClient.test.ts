@@ -220,6 +220,34 @@ describe('GrafanaHttpClient', () => {
       expect(await client.listDashboards()).toEqual([]);
     });
 
+    it('follows list pagination via the metadata.continue token', async () => {
+      const firstPage = {
+        items: [{ metadata: { name: 'a' }, spec: { title: 'A' } }],
+        metadata: { continue: 'token-1' },
+      };
+      const secondPage = {
+        items: [{ metadata: { name: 'b' }, spec: { title: 'B' } }],
+        metadata: { continue: '' },
+      };
+      const { fetch, calls } = mockFetch(url => {
+        if (url.includes('/api/folders')) {
+          return { body: [] };
+        }
+        return { body: url.includes('continue=') ? secondPage : firstPage };
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const dashboards = await client.listDashboards();
+
+      expect(dashboards.map(d => d.uid)).toEqual(['a', 'b']);
+      expect(
+        calls.map(c => c.url).filter(url => url.includes('/dashboards')),
+      ).toEqual([
+        'https://grafana.example.com/apis/dashboard.grafana.app/v1/namespaces/default/dashboards',
+        'https://grafana.example.com/apis/dashboard.grafana.app/v1/namespaces/default/dashboards?continue=token-1',
+      ]);
+    });
+
     it('filters dashboards by tag and query client-side', async () => {
       const { fetch } = appPlatformFetch({
         dashboards: {
@@ -600,6 +628,71 @@ describe('GrafanaHttpClient', () => {
         dashboardUid: 'dash-1',
         panelId: 4,
       });
+    });
+
+    it('counts only alerting and pending instances in activeCount', async () => {
+      const { fetch } = mockFetch(() => ({
+        body: {
+          data: {
+            groups: [
+              {
+                name: 'g',
+                rules: [
+                  {
+                    name: 'r',
+                    state: 'inactive',
+                    type: 'alerting',
+                    alerts: [
+                      { state: 'Alerting' },
+                      { state: 'Pending' },
+                      // A rule that has never fired still reports its
+                      // instances, in the Normal state.
+                      { state: 'Normal' },
+                      { state: 'Error' },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }));
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const [alert] = await client.listAlerts();
+      expect(alert.activeCount).toBe(2);
+    });
+
+    it('recognizes instance states carrying a reason suffix', async () => {
+      const { fetch } = mockFetch(() => ({
+        body: {
+          data: {
+            groups: [
+              {
+                name: 'g',
+                rules: [
+                  {
+                    name: 'r',
+                    state: 'firing',
+                    type: 'alerting',
+                    alerts: [
+                      // Grafana appends the state reason for no-data /
+                      // keep-last handling, e.g. on Grafana Cloud 13.x.
+                      { state: 'Alerting (NoData, KeepLast)' },
+                      { state: 'Normal (NoData, KeepLast)' },
+                      { state: 'Recovering' },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }));
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const [alert] = await client.listAlerts();
+      expect(alert.activeCount).toBe(2);
     });
 
     it('does not parse an empty __panelId__ annotation as panel 0', async () => {
@@ -1002,6 +1095,310 @@ describe('GrafanaHttpClient', () => {
       ]);
       expect(data.series.map(s => s.name)).toEqual(['B']);
       expect(data.warnings).toBeUndefined();
+    });
+  });
+
+  describe('getPanelData datasource resolution', () => {
+    const datasources = [
+      { uid: 'loki-1', name: 'My Loki', type: 'loki' },
+      { uid: 'prom-1', name: 'My Prometheus', type: 'prometheus' },
+    ];
+
+    function resolutionFetch(options: {
+      targets: unknown[];
+      datasources?: { status?: number; body: unknown };
+      query?: { body: unknown };
+    }) {
+      return mockFetch(url => {
+        if (url.includes('/api/ds/query')) {
+          return options.query ?? { body: { results: {} } };
+        }
+        if (url.includes('/api/datasources')) {
+          return options.datasources ?? { body: datasources };
+        }
+        return {
+          body: {
+            metadata: { name: 'abc123' },
+            spec: {
+              panels: [{ id: 1, type: 'timeseries', targets: options.targets }],
+            },
+          },
+        };
+      });
+    }
+
+    it('rewrites a ref whose uid is actually a datasource name', async () => {
+      // Grafana Cloud provisions dashboards whose targets carry the
+      // datasource NAME in the uid field; Grafana's own frontend resolves
+      // uid-then-name, so the client must too.
+      const { fetch, calls } = resolutionFetch({
+        targets: [
+          {
+            refId: 'A',
+            expr: 'up',
+            datasource: { uid: 'My Loki', type: 'loki' },
+          },
+        ],
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      await client.getPanelData('abc123', 1);
+
+      const queryCall = calls.find(c => c.url.includes('/api/ds/query'))!;
+      const body = JSON.parse(String(queryCall.init?.body));
+      expect(body.queries[0].datasource).toEqual({
+        uid: 'loki-1',
+        type: 'loki',
+      });
+    });
+
+    it('resolves legacy string datasource names to uid refs', async () => {
+      const { fetch, calls } = resolutionFetch({
+        targets: [{ refId: 'A', expr: 'up', datasource: 'My Prometheus' }],
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      await client.getPanelData('abc123', 1);
+
+      const queryCall = calls.find(c => c.url.includes('/api/ds/query'))!;
+      const body = JSON.parse(String(queryCall.init?.body));
+      expect(body.queries[0].datasource).toEqual({
+        uid: 'prom-1',
+        type: 'prometheus',
+      });
+    });
+
+    it('skips queries whose datasource does not exist, with a warning', async () => {
+      // A stale ref must not reach /api/ds/query: Grafana would reply
+      // 404 for the WHOLE batch, failing the healthy queries with it.
+      const { fetch, calls } = resolutionFetch({
+        targets: [
+          { refId: 'A', expr: 'up', datasource: { uid: 'deleted-ds' } },
+          { refId: 'B', expr: 'up', datasource: { uid: 'prom-1' } },
+        ],
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const data = await client.getPanelData('abc123', 1);
+
+      const queryCall = calls.find(c => c.url.includes('/api/ds/query'))!;
+      const body = JSON.parse(String(queryCall.init?.body));
+      expect(body.queries.map((q: { refId: string }) => q.refId)).toEqual([
+        'B',
+      ]);
+      expect(data.warnings).toEqual([
+        expect.stringMatching(/Query A was skipped.*'deleted-ds'.*not found/),
+      ]);
+    });
+
+    it('does not query at all when every datasource is unresolvable', async () => {
+      const { fetch, calls } = resolutionFetch({
+        targets: [
+          { refId: 'A', expr: 'up', datasource: { uid: 'deleted-ds' } },
+        ],
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const data = await client.getPanelData('abc123', 1);
+
+      expect(calls.some(c => c.url.includes('/api/ds/query'))).toBe(false);
+      expect(data.series).toEqual([]);
+      expect(data.warnings).toHaveLength(1);
+    });
+
+    it('passes expression and built-in refs through unchecked', async () => {
+      const { fetch, calls } = resolutionFetch({
+        targets: [
+          {
+            refId: 'A',
+            expression: 'B',
+            type: 'reduce',
+            datasource: { type: '__expr__', uid: '__expr__' },
+          },
+          { refId: 'B', expr: 'up', datasource: { uid: 'prom-1' } },
+        ],
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const data = await client.getPanelData('abc123', 1);
+
+      const queryCall = calls.find(c => c.url.includes('/api/ds/query'))!;
+      const body = JSON.parse(String(queryCall.init?.body));
+      expect(body.queries.map((q: { refId: string }) => q.refId)).toEqual([
+        'A',
+        'B',
+      ]);
+      expect(data.warnings).toBeUndefined();
+    });
+
+    it('sends refs unchanged when the datasource listing is unavailable', async () => {
+      const { fetch, calls } = resolutionFetch({
+        targets: [{ refId: 'A', expr: 'up', datasource: { uid: 'whatever' } }],
+        datasources: { status: 403, body: { message: 'forbidden' } },
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const data = await client.getPanelData('abc123', 1);
+
+      const queryCall = calls.find(c => c.url.includes('/api/ds/query'))!;
+      const body = JSON.parse(String(queryCall.init?.body));
+      expect(body.queries[0].datasource).toEqual({ uid: 'whatever' });
+      expect(data.warnings).toBeUndefined();
+    });
+
+    it('defaults a valueless datasource variable from the instance', async () => {
+      // Provisioned dashboards select their datasource through a
+      // datasource-type variable that the Grafana UI evaluates on load —
+      // the stored JSON carries no value, so the client mirrors the UI's
+      // default: the first datasource of the variable's declared type.
+      const { fetch, calls } = mockFetch(url => {
+        if (url.includes('/api/ds/query')) {
+          return { body: { results: {} } };
+        }
+        if (url.includes('/api/datasources')) {
+          return { body: datasources };
+        }
+        return {
+          body: {
+            metadata: { name: 'abc123' },
+            spec: {
+              templating: {
+                list: [{ name: 'DS_LOKI', type: 'datasource', query: 'loki' }],
+              },
+              panels: [
+                {
+                  id: 1,
+                  type: 'timeseries',
+                  datasource: { type: 'loki', uid: '${DS_LOKI}' },
+                  targets: [{ refId: 'A', expr: 'up' }],
+                },
+              ],
+            },
+          },
+        };
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const data = await client.getPanelData('abc123', 1);
+
+      const queryCall = calls.find(c => c.url.includes('/api/ds/query'))!;
+      const body = JSON.parse(String(queryCall.init?.body));
+      expect(body.queries[0].datasource).toEqual({
+        uid: 'loki-1',
+        type: 'loki',
+      });
+      expect(data.warnings).toBeUndefined();
+    });
+
+    it('honors a datasource variable regex when picking the default', async () => {
+      const { fetch, calls } = mockFetch(url => {
+        if (url.includes('/api/ds/query')) {
+          return { body: { results: {} } };
+        }
+        if (url.includes('/api/datasources')) {
+          return {
+            body: [
+              { uid: 'prom-dev', name: 'dev prometheus', type: 'prometheus' },
+              { uid: 'prom-prod', name: 'prod prometheus', type: 'prometheus' },
+            ],
+          };
+        }
+        return {
+          body: {
+            metadata: { name: 'abc123' },
+            spec: {
+              templating: {
+                list: [
+                  {
+                    name: 'DS_PROM',
+                    type: 'datasource',
+                    query: 'prometheus',
+                    regex: '/prod/',
+                  },
+                ],
+              },
+              panels: [
+                {
+                  id: 1,
+                  type: 'timeseries',
+                  datasource: { type: 'prometheus', uid: '${DS_PROM}' },
+                  targets: [{ refId: 'A', expr: 'up' }],
+                },
+              ],
+            },
+          },
+        };
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      await client.getPanelData('abc123', 1);
+
+      const queryCall = calls.find(c => c.url.includes('/api/ds/query'))!;
+      const body = JSON.parse(String(queryCall.init?.body));
+      expect(body.queries[0].datasource).toEqual({
+        uid: 'prom-prod',
+        type: 'prometheus',
+      });
+    });
+
+    it('keeps the skip warning when no datasource matches the variable', async () => {
+      const { fetch, calls } = mockFetch(url => {
+        if (url.includes('/api/ds/query')) {
+          return { body: { results: {} } };
+        }
+        if (url.includes('/api/datasources')) {
+          return { body: datasources }; // no 'grafana-incident-datasource'
+        }
+        return {
+          body: {
+            metadata: { name: 'abc123' },
+            spec: {
+              templating: {
+                list: [
+                  {
+                    name: 'DS_INCIDENT',
+                    type: 'datasource',
+                    query: 'grafana-incident-datasource',
+                  },
+                ],
+              },
+              panels: [
+                {
+                  id: 1,
+                  type: 'timeseries',
+                  datasource: {
+                    type: 'grafana-incident-datasource',
+                    uid: '${DS_INCIDENT}',
+                  },
+                  targets: [{ refId: 'A', expr: 'up' }],
+                },
+              ],
+            },
+          },
+        };
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      const data = await client.getPanelData('abc123', 1);
+
+      expect(calls.some(c => c.url.includes('/api/ds/query'))).toBe(false);
+      expect(data.warnings).toEqual([
+        expect.stringContaining('could not be resolved'),
+      ]);
+    });
+
+    it('reuses the datasource listing across panel data calls', async () => {
+      const { fetch, calls } = resolutionFetch({
+        targets: [{ refId: 'A', expr: 'up', datasource: { uid: 'prom-1' } }],
+      });
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      await client.getPanelData('abc123', 1);
+      await client.getPanelData('abc123', 1);
+
+      expect(
+        calls.filter(c => c.url.endsWith('/api/datasources')),
+      ).toHaveLength(1);
     });
   });
 });

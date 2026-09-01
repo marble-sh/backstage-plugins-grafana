@@ -227,7 +227,9 @@ describe('GrafanaAlertsContent', () => {
 
     expect(screen.getByText('firing')).toBeInTheDocument();
     expect(screen.getByText('error')).toBeInTheDocument();
-    expect(screen.getByText('p99 above 500ms')).toBeInTheDocument();
+    // Rule-level summary annotations are unrendered Go templates, so the
+    // table deliberately has no summary column.
+    expect(screen.queryByText('p99 above 500ms')).not.toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /High latency/i })).toHaveAttribute(
       'href',

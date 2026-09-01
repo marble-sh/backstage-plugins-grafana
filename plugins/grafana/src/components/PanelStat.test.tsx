@@ -18,14 +18,14 @@ import { render, screen } from '@testing-library/react';
 import { PanelStat } from './PanelStat';
 
 describe('PanelStat', () => {
-  it('shows the latest non-null value of the first series', () => {
+  it('shows the latest non-null value of the first series without its name', () => {
     render(
       <PanelStat
         data={{
           panelId: 1,
           series: [
             {
-              name: 'uptime',
+              name: 'count(up{job=~"(.*)"}) or vector(0)',
               points: [
                 { timeMs: 1, value: 98.6 },
                 { timeMs: 2, value: 99.93 },
@@ -38,7 +38,29 @@ describe('PanelStat', () => {
     );
 
     expect(screen.getByText('99.93')).toBeInTheDocument();
+    // A lone series is often named after its query text (Prometheus does this
+    // for label-less results) — like Grafana's stat panel, show only the value.
+    expect(
+      screen.queryByText('count(up{job=~"(.*)"}) or vector(0)'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('names the shown series when there are several to disambiguate', () => {
+    render(
+      <PanelStat
+        data={{
+          panelId: 1,
+          series: [
+            { name: 'uptime', points: [{ timeMs: 1, value: 98.6 }] },
+            { name: 'downtime', points: [{ timeMs: 1, value: 1.4 }] },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('98.6')).toBeInTheDocument();
     expect(screen.getByText('uptime')).toBeInTheDocument();
+    expect(screen.queryByText('downtime')).not.toBeInTheDocument();
   });
 
   it('compacts large values', () => {

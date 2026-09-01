@@ -134,7 +134,8 @@ export const GrafanaDashboardsContent = () => {
 
 /**
  * Entity content that lists the entity's Grafana alerts with their live
- * state, health, active-since time, and summary, deep-linked into Grafana.
+ * state, health, active-since time, and instance count, deep-linked into
+ * Grafana.
  *
  * @public
  */
