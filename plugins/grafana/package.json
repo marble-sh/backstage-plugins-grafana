@@ -1,6 +1,6 @@
 {
   "name": "@marble-sh/backstage-plugin-grafana",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Frontend for the Grafana Backstage plugin: entity dashboard/alert content and a standalone instances page",
   "main": "src/index.ts",
   "types": "src/index.ts",
