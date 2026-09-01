@@ -53,8 +53,10 @@ proxies Grafana's datasource query API — the browser never talks to Grafana):
 ![backstage-plugin-grafana-alerts.png](docs/images/backstage-plugin-grafana-alerts.png)
 
 The **Grafana Alerts** tab lists the selected alert rules with their state and
-health, how long they have been active, the number of active instances, and
-the rule's `summary` annotation — each deep-linked to the rule in Grafana.
+health, how long they have been active, and the number of active instances —
+each deep-linked to the rule in Grafana. The rule's `summary` annotation is
+deliberately not shown: the rules API returns it as an unrendered Go template
+(`{{ $values.B }}`…), which reads as noise in a table.
 
 ## Entity annotations
 
@@ -109,6 +111,10 @@ spec:
   lifecycle: production
   owner: team-a
 ```
+
+A complete example using all five annotations, with values validated against
+a live Grafana Cloud stack, is in
+[`docs/examples/catalog-info.yaml`](../../docs/examples/catalog-info.yaml).
 
 ## Installation
 

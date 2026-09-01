@@ -30,7 +30,13 @@ import {
   filterAlerts,
   filterDashboards,
 } from './filters';
-import { buildPanelQueries, extractPanels, normalizeFrames } from './panels';
+import {
+  buildPanelQueries,
+  extractPanels,
+  normalizeFrames,
+  readUnresolvedDatasourceVariables,
+  TemplateVariables,
+} from './panels';
 
 /**
  * Options for listing dashboards.
@@ -184,13 +190,72 @@ const toActiveAt = (activeAt: unknown): string | undefined =>
 const DASHBOARD_UID_ANNOTATION = '__dashboardUid__';
 const PANEL_ID_ANNOTATION = '__panelId__';
 
+/**
+ * Instance states that count as active. A rule's `alerts` array also lists
+ * instances in the `Normal` state, which must not inflate `activeCount`.
+ */
+const ACTIVE_INSTANCE_STATES = new Set([
+  'alerting',
+  'pending',
+  'recovering',
+  'firing',
+]);
+
+/**
+ * Grafana may append a state reason to an instance state, e.g.
+ * `Alerting (NoData, KeepLast)` — only the leading word is the state.
+ */
+const instanceStateName = (state: string): string =>
+  state.split(/[\s(]/, 1)[0].toLocaleLowerCase('en-US');
+
+const countActiveInstances = (instances: PrometheusAlertInstance[]): number =>
+  instances.filter(
+    alertInstance =>
+      typeof alertInstance?.state === 'string' &&
+      ACTIVE_INSTANCE_STATES.has(instanceStateName(alertInstance.state)),
+  ).length;
+
 /** How long a fetched dashboard model is reused for panel data queries. */
 const MODEL_CACHE_TTL_MS = 30_000;
+
+/** Upper bound on App Platform dashboard list pages read per listing. */
+const MAX_DASHBOARD_LIST_PAGES = 100;
+
+/**
+ * Datasource refs that never appear in `/api/datasources`: server-side
+ * expressions and the built-in Grafana datasource.
+ */
+const BUILTIN_DATASOURCE_REFS = new Set([
+  '__expr__',
+  'grafana',
+  '-- Grafana --',
+  '-- Mixed --',
+]);
 
 type DsQueryResults = Record<
   string,
   { status?: number; frames?: unknown[]; error?: string } | undefined
 >;
+
+type GrafanaDatasource = { uid?: string; name?: string; type?: string };
+
+/** The instance's datasources, indexed for ref resolution. */
+type DatasourceListing = {
+  /** All datasources, in the order Grafana lists them (by name). */
+  all: GrafanaDatasource[];
+  byUid: Map<string, GrafanaDatasource>;
+  byName: Map<string, GrafanaDatasource>;
+};
+
+/** Parses Grafana's `/pattern/flags` variable regex; undefined when invalid. */
+const parseVariableRegex = (regex: string): RegExp | undefined => {
+  const match = regex.match(/^\/(.*)\/([a-z]*)$/s);
+  try {
+    return match ? new RegExp(match[1], match[2]) : new RegExp(regex);
+  } catch {
+    return undefined;
+  }
+};
 
 type PrometheusGroup = {
   name?: string;
@@ -215,6 +280,10 @@ export class GrafanaHttpClient implements GrafanaClient {
     string,
     { promise: Promise<Record<string, unknown>>; expiresAt: number }
   >();
+  private datasourceCache?: {
+    promise: Promise<DatasourceListing | undefined>;
+    expiresAt: number;
+  };
 
   constructor(options: { instance: GrafanaInstanceConfig; fetch?: FetchApi }) {
     this.instance = options.instance;
@@ -276,7 +345,7 @@ export class GrafanaHttpClient implements GrafanaClient {
           ...(summary ? { summary } : {}),
           ...(activeAt ? { activeAt } : {}),
           ...(Array.isArray(rule.alerts)
-            ? { activeCount: rule.alerts.length }
+            ? { activeCount: countActiveInstances(rule.alerts) }
             : {}),
           ...(dashboardUid ? { dashboardUid } : {}),
           ...(Number.isFinite(panelId) ? { panelId } : {}),
@@ -317,12 +386,16 @@ export class GrafanaHttpClient implements GrafanaClient {
       );
     }
 
+    const extraVariables = await this.resolveDatasourceVariables(model);
     const { queries, hiddenRefIds, warnings } = buildPanelQueries({
       panel: panel.model,
       model,
       range: { from, to },
+      ...(extraVariables ? { extraVariables } : {}),
     });
-    if (queries.length === 0) {
+    const resolved = await this.resolveQueryDatasources(queries);
+    warnings.push(...resolved.warnings);
+    if (resolved.queries.length === 0) {
       return {
         panelId,
         series: [],
@@ -330,7 +403,11 @@ export class GrafanaHttpClient implements GrafanaClient {
       };
     }
 
-    const results = await this.postDsQuery({ from, to, queries });
+    const results = await this.postDsQuery({
+      from,
+      to,
+      queries: resolved.queries,
+    });
     const frames: unknown[] = [];
     for (const refId of Object.keys(results).sort()) {
       const entry = results[refId];
@@ -457,15 +534,166 @@ export class GrafanaHttpClient implements GrafanaClient {
     return parsed.results ?? {};
   }
 
-  private async listDashboardsAppPlatform(): Promise<GrafanaDashboard[]> {
-    const [body, folders] = await Promise.all([
-      this.get<{ items?: AppPlatformDashboard[] }>(
-        `/apis/dashboard.grafana.app/v1/namespaces/${this.instance.namespace}/dashboards`,
-      ),
-      this.listFolders(),
-    ]);
+  /**
+   * Computes default values for the model's valueless `datasource`-type
+   * template variables, mirroring what the Grafana UI does on dashboard
+   * load: the first datasource of the variable's declared type, narrowed by
+   * its name regex when one is set. Returns `undefined` when the model has
+   * no such variables or the datasource listing is unavailable.
+   */
+  private async resolveDatasourceVariables(
+    model: unknown,
+  ): Promise<TemplateVariables | undefined> {
+    const unresolved = readUnresolvedDatasourceVariables(model);
+    if (unresolved.length === 0) {
+      return undefined;
+    }
+    const listing = await this.listDatasources();
+    if (!listing) {
+      return undefined;
+    }
 
-    return (body.items ?? []).map(item => {
+    const values: TemplateVariables = {};
+    for (const variable of unresolved) {
+      const matcher = variable.regex
+        ? parseVariableRegex(variable.regex)
+        : undefined;
+      const match = listing.all.find(
+        datasource =>
+          (!variable.type || datasource.type === variable.type) &&
+          (!matcher || matcher.test(datasource.name ?? '')),
+      );
+      if (match?.uid) {
+        values[variable.name] = match.uid;
+      }
+    }
+    return Object.keys(values).length > 0 ? values : undefined;
+  }
+
+  /**
+   * Resolves each query's datasource ref against the instance's datasources:
+   * refs whose `uid` is actually a datasource *name* are rewritten to the
+   * real uid (Grafana's own frontend resolves uid-then-name, and its
+   * provisioned dashboards rely on it), and refs matching no datasource are
+   * dropped with a warning — an unknown ref makes `/api/ds/query` reject the
+   * whole batch with a 404, healthy queries included. When the datasource
+   * listing itself is unavailable, the queries pass through unchanged.
+   */
+  private async resolveQueryDatasources(
+    queries: Array<Record<string, unknown>>,
+  ): Promise<{ queries: Array<Record<string, unknown>>; warnings: string[] }> {
+    if (queries.length === 0) {
+      return { queries, warnings: [] };
+    }
+    const listing = await this.listDatasources();
+    if (!listing) {
+      return { queries, warnings: [] };
+    }
+
+    const resolved: Array<Record<string, unknown>> = [];
+    const warnings: string[] = [];
+    for (const query of queries) {
+      const ref = query.datasource;
+      const refRecord =
+        typeof ref === 'object' && ref !== null
+          ? (ref as { uid?: unknown; type?: unknown })
+          : undefined;
+      const uid = typeof ref === 'string' ? ref : refRecord?.uid;
+      if (
+        typeof uid !== 'string' ||
+        !uid ||
+        BUILTIN_DATASOURCE_REFS.has(uid) ||
+        refRecord?.type === '__expr__' ||
+        listing.byUid.has(uid)
+      ) {
+        resolved.push(query);
+        continue;
+      }
+      const byName = listing.byName.get(uid);
+      if (byName?.uid) {
+        resolved.push({
+          ...query,
+          datasource: {
+            uid: byName.uid,
+            ...(byName.type ? { type: byName.type } : {}),
+          },
+        });
+        continue;
+      }
+      warnings.push(
+        `Query ${query.refId} was skipped: datasource '${uid}' was not found on the instance`,
+      );
+    }
+    return { queries: resolved, warnings };
+  }
+
+  /**
+   * Fetches the instance's datasources for ref resolution, briefly memoized
+   * like the dashboard models. Returns `undefined` when the listing cannot
+   * be read (e.g. the token lacks `datasources:read`) — resolution then
+   * degrades to sending refs as-is.
+   */
+  private listDatasources(): Promise<DatasourceListing | undefined> {
+    const now = Date.now();
+    if (this.datasourceCache && this.datasourceCache.expiresAt > now) {
+      return this.datasourceCache.promise;
+    }
+    const promise = (async () => {
+      try {
+        const body = await this.get<GrafanaDatasource[]>('/api/datasources');
+        if (!Array.isArray(body)) {
+          return undefined;
+        }
+        const all: GrafanaDatasource[] = [];
+        const byUid = new Map<string, GrafanaDatasource>();
+        const byName = new Map<string, GrafanaDatasource>();
+        for (const datasource of body) {
+          if (typeof datasource?.uid !== 'string' || !datasource.uid) {
+            continue;
+          }
+          all.push(datasource);
+          byUid.set(datasource.uid, datasource);
+          if (typeof datasource.name === 'string' && datasource.name) {
+            byName.set(datasource.name, datasource);
+          }
+        }
+        return { all, byUid, byName };
+      } catch {
+        return undefined;
+      }
+    })();
+    this.datasourceCache = { promise, expiresAt: now + MODEL_CACHE_TTL_MS };
+    return promise;
+  }
+
+  private async listDashboardsAppPlatform(): Promise<GrafanaDashboard[]> {
+    const foldersPromise = this.listFolders();
+    const basePath = `/apis/dashboard.grafana.app/v1/namespaces/${this.instance.namespace}/dashboards`;
+
+    // The list is a Kubernetes-style paginated collection: a page holds
+    // roughly a hundred dashboards and carries a `metadata.continue` token
+    // while more remain. The page cap only guards against a server that
+    // keeps returning tokens forever.
+    const items: AppPlatformDashboard[] = [];
+    let continueToken: string | undefined;
+    for (let page = 0; page < MAX_DASHBOARD_LIST_PAGES; page++) {
+      const body = await this.get<{
+        items?: AppPlatformDashboard[];
+        metadata?: { continue?: string };
+      }>(
+        continueToken
+          ? `${basePath}?continue=${encodeURIComponent(continueToken)}`
+          : basePath,
+      );
+      items.push(...(body.items ?? []));
+      continueToken = body.metadata?.continue || undefined;
+      if (!continueToken) {
+        break;
+      }
+    }
+    const folders = await foldersPromise;
+
+    return items.map(item => {
       const uid = item.metadata?.name ?? '';
       const title = item.spec?.title ?? uid;
       const folderUid = item.metadata?.annotations?.[FOLDER_ANNOTATION];

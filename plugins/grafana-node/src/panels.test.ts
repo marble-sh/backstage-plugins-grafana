@@ -20,6 +20,7 @@ import {
   interpolateTemplate,
   normalizeFrames,
   readTemplateVariables,
+  readUnresolvedDatasourceVariables,
   resolveTimeRange,
 } from './panels';
 
@@ -107,6 +108,70 @@ describe('readTemplateVariables', () => {
   it('returns empty for models without templating', () => {
     expect(readTemplateVariables({})).toEqual({});
     expect(readTemplateVariables(undefined)).toEqual({});
+  });
+
+  it('substitutes a custom allValue for the special $__all selection', () => {
+    expect(
+      readTemplateVariables({
+        templating: {
+          list: [
+            { name: 'a', allValue: '.+', current: { value: '$__all' } },
+            { name: 'b', allValue: '.+', current: { value: ['$__all'] } },
+            { name: 'c', current: { value: '$__all' } },
+            { name: 'd', allValue: '', current: { value: '$__all' } },
+            { name: 'e', allValue: '.+', current: { value: ['x', '$__all'] } },
+          ],
+        },
+      }),
+    ).toEqual({
+      a: '.+',
+      b: '.+',
+      c: '$__all',
+      d: '$__all',
+      e: ['x', '$__all'],
+    });
+  });
+});
+
+describe('readUnresolvedDatasourceVariables', () => {
+  it('lists datasource variables without a saved value', () => {
+    expect(
+      readUnresolvedDatasourceVariables({
+        templating: {
+          list: [
+            {
+              name: 'DS_INCIDENT',
+              type: 'datasource',
+              query: 'grafana-incident-datasource',
+            },
+            {
+              name: 'DS_PROM',
+              type: 'datasource',
+              query: 'prometheus',
+              regex: '/prod/',
+              current: {},
+            },
+            // Already has a value — nothing to resolve.
+            {
+              name: 'DS_SAVED',
+              type: 'datasource',
+              query: 'loki',
+              current: { value: 'loki-1' },
+            },
+            // Not a datasource variable.
+            { name: 'env', type: 'query' },
+          ],
+        },
+      }),
+    ).toEqual([
+      { name: 'DS_INCIDENT', type: 'grafana-incident-datasource' },
+      { name: 'DS_PROM', type: 'prometheus', regex: '/prod/' },
+    ]);
+  });
+
+  it('returns empty for models without templating', () => {
+    expect(readUnresolvedDatasourceVariables({})).toEqual([]);
+    expect(readUnresolvedDatasourceVariables(undefined)).toEqual([]);
   });
 });
 
@@ -314,6 +379,116 @@ describe('buildPanelQueries', () => {
     expect(queries[0].maxDataPoints).toBe(300);
   });
 
+  it('interpolates caller-provided extra variables, saved values winning', () => {
+    const { queries, warnings } = buildPanelQueries({
+      panel: {
+        id: 1,
+        datasource: { uid: '${DS_X}', type: 'loki' },
+        targets: [{ refId: 'A', expr: 'up{env="$env"}' }],
+      },
+      model: {
+        templating: {
+          list: [
+            { name: 'DS_X', type: 'datasource' },
+            { name: 'env', current: { value: 'prod' } },
+          ],
+        },
+      },
+      range: { from: 'now-1h', to: 'now' },
+      extraVariables: { DS_X: 'loki-1', env: 'never-used' },
+    });
+
+    expect(warnings).toEqual([]);
+    expect(queries[0].datasource).toEqual({ uid: 'loki-1', type: 'loki' });
+    expect(queries[0].expr).toBe('up{env="prod"}');
+  });
+
+  it('skips targets still referencing a variable with no saved value', () => {
+    const { queries, warnings } = buildPanelQueries({
+      panel: {
+        id: 1,
+        datasource: { uid: 'ds-1' },
+        targets: [
+          { refId: 'A', expr: 'up * $is_customer' },
+          { refId: 'B', expr: 'up{env="$env"}' },
+        ],
+      },
+      model: {
+        templating: {
+          list: [
+            { name: 'env', current: { value: 'prod' } },
+            // Saved with no selection — common on freshly provisioned
+            // dashboards whose variables refresh on load.
+            { name: 'is_customer', current: {} },
+          ],
+        },
+      },
+      range: { from: 'now-1h', to: 'now' },
+    });
+
+    expect(queries.map(query => query.refId)).toEqual(['B']);
+    expect(warnings).toEqual([
+      expect.stringMatching(/Query A was skipped.*\$is_customer.*no saved/),
+    ]);
+  });
+
+  it('does not report skipped hidden targets as hidden', () => {
+    const { queries, hiddenRefIds } = buildPanelQueries({
+      panel: {
+        id: 1,
+        datasource: { uid: 'ds-1' },
+        targets: [{ refId: 'A', expr: '$broken', hide: true }],
+      },
+      model: {
+        templating: { list: [{ name: 'broken', current: {} }] },
+      },
+      range: { from: 'now-1h', to: 'now' },
+    });
+
+    expect(queries).toEqual([]);
+    expect(hiddenRefIds).toEqual([]);
+  });
+
+  it('passes through built-ins and undeclared variables untouched', () => {
+    const { queries, warnings } = buildPanelQueries({
+      panel: {
+        id: 1,
+        datasource: { uid: 'ds-1' },
+        targets: [
+          { refId: 'A', expr: 'rate(up[$__rate_interval]) + $undeclared' },
+        ],
+      },
+      model,
+      range: { from: 'now-1h', to: 'now' },
+    });
+
+    expect(warnings).toEqual([]);
+    expect(queries[0].expr).toBe('rate(up[$__rate_interval]) + $undeclared');
+  });
+
+  it('resolves auto-interval variable values to the computed interval', () => {
+    const { queries } = buildPanelQueries({
+      panel: {
+        id: 1,
+        datasource: { uid: 'ds-1' },
+        maxDataPoints: 100,
+        targets: [{ refId: 'A', expr: 'rate(up[$res]) and rate(up[$auto])' }],
+      },
+      model: {
+        templating: {
+          list: [
+            { name: 'res', current: { value: '$__auto_interval_res' } },
+            { name: 'auto', current: { value: '$__auto' } },
+          ],
+        },
+      },
+      // (1h / 100 points) = 36s
+      range: { from: 'now-1h', to: 'now' },
+    });
+
+    expect(queries[0].expr).toBe('rate(up[36s]) and rate(up[36s])');
+  });
+
   it('never assigns a fallback refId that another target declares', () => {
     const { queries } = buildPanelQueries({
       panel: {
@@ -442,5 +617,16 @@ describe('normalizeFrames', () => {
   it('tolerates malformed frames', () => {
     const { series } = normalizeFrames([null, {}, { schema: {} }] as never[]);
     expect(series).toEqual([]);
+  });
+
+  it('silently skips field-less frames from empty query results', () => {
+    // A query that matches no series still returns a frame, with an empty
+    // fields array — that is a normal empty result, not a warning.
+    const { series, warnings } = normalizeFrames([
+      { schema: { refId: 'A', fields: [] }, data: { values: [] } },
+    ]);
+
+    expect(series).toEqual([]);
+    expect(warnings).toEqual([]);
   });
 });

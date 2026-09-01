@@ -35,7 +35,11 @@ const latestValue = (data: GrafanaPanelData): number | undefined => {
 
 /**
  * A single-value tile for a panel's queried data, showing the latest value of
- * its first series.
+ * its first series. The series name is shown only when the query returned
+ * several series, matching Grafana's stat panel in its default "auto" text
+ * mode — a lone series is often named after the raw query expression
+ * (Prometheus does this for label-less results), which adds nothing under a
+ * titled panel.
  *
  * @public
  */
@@ -44,7 +48,8 @@ export const PanelStat = (props: {
   data: GrafanaPanelData;
 }) => {
   const value = latestValue(props.data);
-  const name = props.data.series[0]?.name;
+  const name =
+    props.data.series.length > 1 ? props.data.series[0]?.name : undefined;
 
   return (
     <>
