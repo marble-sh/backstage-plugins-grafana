@@ -1,5 +1,13 @@
 # @marble-sh/backstage-plugin-scaffolder-backend-module-grafana
 
+## 1.0.4
+
+### Patch Changes
+
+- b164dcc: Bump backstage dependencies to 1.55.1
+- Updated dependencies [b164dcc]
+  - @marble-sh/backstage-plugin-grafana-node@1.2.2
+
 ## 1.0.3
 
 ### Patch Changes

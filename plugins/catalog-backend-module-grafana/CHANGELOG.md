@@ -1,5 +1,14 @@
 # @marble-sh/backstage-plugin-catalog-backend-module-grafana
 
+## 1.2.2
+
+### Patch Changes
+
+- b164dcc: Bump backstage dependencies to 1.55.1
+- Updated dependencies [b164dcc]
+  - @marble-sh/backstage-plugin-grafana-common@1.2.2
+  - @marble-sh/backstage-plugin-grafana-node@1.2.2
+
 ## 1.2.1
 
 ### Patch Changes
