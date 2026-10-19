@@ -347,10 +347,17 @@ yarn start   # from this directory, runs the plugin in a standalone backend
 ## Testing
 
 ```sh
+# Unit tests (HTTP client, config, stores, router, frontend)
 yarn workspace @marble-sh/backstage-plugin-grafana-backend test
+
+# Integration tests (boots the plugin and validates every REST endpoint)
+yarn workspace @marble-sh/backstage-plugin-grafana-backend test:integration
 ```
 
 The plugin is developed test-first. Unit tests cover the HTTP client (with an
 injected `fetch`), config parsing, both stores (the database store against an
-in-memory SQLite), the caching service, and the router. An integration test
-boots the plugin with `startTestBackend` and a mocked Grafana.
+in-memory SQLite), the caching service, and the router. The integration suite
+boots the plugin with `startTestBackend`, stubs Grafana at the HTTP boundary,
+and validates every endpoint response against a zod schema (including the
+error envelope). CI runs it explicitly on every pull request in addition to
+the full test suite.
