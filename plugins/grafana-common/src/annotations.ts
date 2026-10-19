@@ -25,6 +25,20 @@ import { Entity } from '@backstage/catalog-model';
 export const GRAFANA_ANNOTATION_INSTANCE = 'grafana/instance';
 
 /**
+ * Legacy alias for {@link GRAFANA_ANNOTATION_INSTANCE}, read as a fallback
+ * only when `grafana/instance` is absent. Predecessor plugins used this key
+ * with the same value (the Grafana instance name, e.g. a Grafana Cloud stack
+ * slug), so accepting it keeps entities working while their catalog
+ * descriptors migrate.
+ *
+ * @deprecated Set {@link GRAFANA_ANNOTATION_INSTANCE} instead; this alias
+ * will be removed in a future major release.
+ *
+ * @public
+ */
+export const GRAFANA_ANNOTATION_LEGACY_HOST_ID = 'grafana/host-id';
+
+/**
  * Selects the dashboards shown for an entity: a comma-separated list of
  * case-insensitive title substrings, matching any dashboard whose title
  * contains at least one of the values.
@@ -66,12 +80,15 @@ const read = (entity: Entity, key: string): string | undefined => {
 };
 
 /**
- * Returns the configured Grafana instance name for an entity, if any.
+ * Returns the configured Grafana instance name for an entity, if any. The
+ * deprecated {@link GRAFANA_ANNOTATION_LEGACY_HOST_ID} is read as a fallback
+ * when {@link GRAFANA_ANNOTATION_INSTANCE} is absent.
  *
  * @public
  */
 export const getGrafanaInstanceName = (entity: Entity): string | undefined =>
-  read(entity, GRAFANA_ANNOTATION_INSTANCE);
+  read(entity, GRAFANA_ANNOTATION_INSTANCE) ??
+  read(entity, GRAFANA_ANNOTATION_LEGACY_HOST_ID);
 
 /**
  * Returns the dashboard selector expression for an entity, if any.
