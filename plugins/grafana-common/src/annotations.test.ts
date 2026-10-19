@@ -20,6 +20,7 @@ import {
   GRAFANA_ANNOTATION_DASHBOARD_SELECTOR,
   GRAFANA_ANNOTATION_DASHBOARD_UID,
   GRAFANA_ANNOTATION_INSTANCE,
+  GRAFANA_ANNOTATION_LEGACY_HOST_ID,
   GRAFANA_ANNOTATION_TAG_SELECTOR,
   getAlertLabelSelector,
   getDashboardSelector,
@@ -41,6 +42,7 @@ const entityWith = (annotations: Record<string, string>): Entity => ({
 describe('grafana annotations', () => {
   it('exposes the well-known annotation keys', () => {
     expect(GRAFANA_ANNOTATION_INSTANCE).toBe('grafana/instance');
+    expect(GRAFANA_ANNOTATION_LEGACY_HOST_ID).toBe('grafana/host-id');
     expect(GRAFANA_ANNOTATION_DASHBOARD_SELECTOR).toBe(
       'grafana/dashboard-selector',
     );
@@ -59,6 +61,41 @@ describe('grafana annotations', () => {
 
     it('returns undefined when the annotation is missing', () => {
       expect(getGrafanaInstanceName(entityWith({}))).toBeUndefined();
+    });
+
+    it('falls back to the deprecated host-id alias', () => {
+      const entity = entityWith({
+        [GRAFANA_ANNOTATION_LEGACY_HOST_ID]: 'prod',
+      });
+      expect(getGrafanaInstanceName(entity)).toBe('prod');
+      expect(isDashboardsAvailable(entity)).toBe(true);
+      expect(isAlertsAvailable(entity)).toBe(true);
+      expect(isGrafanaAvailable(entity)).toBe(true);
+    });
+
+    it('prefers grafana/instance over the alias, even when empty-but-set', () => {
+      expect(
+        getGrafanaInstanceName(
+          entityWith({
+            [GRAFANA_ANNOTATION_INSTANCE]: 'primary',
+            [GRAFANA_ANNOTATION_LEGACY_HOST_ID]: 'legacy',
+          }),
+        ),
+      ).toBe('primary');
+      // An empty grafana/instance counts as absent, like every annotation.
+      expect(
+        getGrafanaInstanceName(
+          entityWith({
+            [GRAFANA_ANNOTATION_INSTANCE]: '',
+            [GRAFANA_ANNOTATION_LEGACY_HOST_ID]: 'legacy',
+          }),
+        ),
+      ).toBe('legacy');
+      expect(
+        getGrafanaInstanceName(
+          entityWith({ [GRAFANA_ANNOTATION_LEGACY_HOST_ID]: '' }),
+        ),
+      ).toBeUndefined();
     });
   });
 
