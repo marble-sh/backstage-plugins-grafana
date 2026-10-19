@@ -90,6 +90,11 @@ How the annotations combine:
   without Grafana annotations never show Grafana UI.
 - **Empty values count as absent** — an annotation set to `''` neither gates
   nor filters.
+- **Legacy alias (deprecated):** `grafana/host-id` is read as a fallback for
+  `grafana/instance` when the latter is absent, easing migration from
+  predecessor plugins that used that key with the same value. New entities
+  must set `grafana/instance`; the alias will be removed in a future major
+  release.
 
 > Migrating from the community plugin? These annotations look similar but
 > behave differently — see
