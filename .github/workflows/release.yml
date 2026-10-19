@@ -45,9 +45,6 @@ jobs:
       - name: Update NPM
         run: npm install -g npm@latest
 
-      - name: Ensure user .npmrc exists
-        run: touch ~/.npmrc
-
       - name: Install dependencies
         run: yarn install --immutable
 
@@ -63,5 +60,4 @@ jobs:
           publish: yarn release:publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'
