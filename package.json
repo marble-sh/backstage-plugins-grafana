@@ -16,6 +16,7 @@
     "clean": "backstage-cli repo clean",
     "test": "backstage-cli repo test",
     "test:all": "backstage-cli repo test --coverage",
+    "test:integration": "yarn workspace @marble-sh/backstage-plugin-grafana-backend test:integration",
     "fix": "backstage-cli repo fix",
     "fix:check": "backstage-cli repo fix --check --publish",
     "lint": "backstage-cli repo lint --since origin/main",

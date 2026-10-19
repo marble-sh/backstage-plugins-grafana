@@ -4864,6 +4864,7 @@ __metadata:
     express-promise-router: "npm:^4.1.0"
     knex: "npm:^3.0.0"
     supertest: "npm:^6.2.4"
+    zod: "npm:^4.0.0"
   languageName: unknown
   linkType: soft
 
