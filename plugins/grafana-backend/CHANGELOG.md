@@ -1,5 +1,14 @@
 # @marble-sh/backstage-plugin-grafana-backend
 
+## 1.3.2
+
+### Patch Changes
+
+- 21a3edd: Added integration tests that boot the backend plugin and validate every REST
+  endpoint response against a schema. CI now runs them on every pull request.
+- Updated dependencies [deef73a]
+  - @marble-sh/backstage-plugin-grafana-common@1.3.0
+
 ## 1.3.1
 
 ### Patch Changes
