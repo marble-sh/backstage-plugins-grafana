@@ -37,6 +37,9 @@ export const GRAFANA_ANNOTATION_DASHBOARD_UID = 'grafana/dashboard-uid';
 // @public
 export const GRAFANA_ANNOTATION_INSTANCE = 'grafana/instance';
 
+// @public @deprecated
+export const GRAFANA_ANNOTATION_LEGACY_HOST_ID = 'grafana/host-id';
+
 // @public
 export const GRAFANA_ANNOTATION_TAG_SELECTOR = 'grafana/tag-selector';
 
