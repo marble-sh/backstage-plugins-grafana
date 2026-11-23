@@ -44,6 +44,12 @@ least minor and probably major.
 So the "Version Packages" PR is the running answer to _"what has shipped since
 the last release?"_ — one entry per merged PR, each linking back to it.
 
+Separately, the **Auto Backstage bump** workflow
+(`.github/workflows/auto-backstage-bump.yml`) checks every Tuesday whether a
+new Backstage release exists and opens a bump PR (pin, lockfile, API reports,
+changeset) when it does. CI does not start automatically on those PRs — close
+and reopen the PR to run checks.
+
 ## Changelog entries
 
 Auto-generated changeset summaries look like:

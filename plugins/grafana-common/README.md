@@ -12,14 +12,15 @@ It provides:
 
 ## Entity annotations
 
-| Annotation                     | Helper                   | Meaning                                                                                                             |
-| ------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `grafana/instance`             | `getGrafanaInstanceName` | The `grafana.instances[].name` the entity belongs to (exact match). Absent = query all configured instances.        |
-| `grafana/host-id` (deprecated) | `getGrafanaInstanceName` | Deprecated fallback for `grafana/instance`, read only when the latter is absent. Removed in a future major release. |
-| `grafana/dashboard-selector`   | `getDashboardSelector`   | Comma-separated, case-insensitive title substrings; **any** match selects the dashboard.                            |
-| `grafana/dashboard-uid`        | `getDashboardUid`        | A single dashboard uid (exact, case-sensitive match). Written by catalog discovery on its dashboard `Resource`s.    |
-| `grafana/tag-selector`         | `getTagSelector`         | Comma-separated dashboard tags; the dashboard must carry **all** of them.                                           |
-| `grafana/alert-label-selector` | `getAlertLabelSelector`  | `key=value,...` alert label matchers; the rule's labels must contain **all** pairs.                                 |
+| Annotation                     | Helper                   | Meaning                                                                                                                     |
+| ------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `grafana/instance`             | `getGrafanaInstanceName` | The `grafana.instances[].name` the entity belongs to (exact match). Absent = query all configured instances.                |
+| `grafana/host-id` (deprecated) | `getGrafanaInstanceName` | Deprecated fallback for `grafana/instance`, read only when the latter is absent. Removed in a future major release.         |
+| `grafana/dashboard-selector`   | `getDashboardSelector`   | Comma-separated, case-insensitive title substrings; **any** match selects the dashboard.                                    |
+| `grafana/dashboard-uid`        | `getDashboardUid`        | A single dashboard uid (exact, case-sensitive match). Written by catalog discovery on its dashboard `Resource`s.            |
+| `grafana/tag-selector`         | `getTagSelector`         | Comma-separated dashboard tags; the dashboard must carry **all** of them.                                                   |
+| `grafana/alert-label-selector` | `getAlertLabelSelector`  | `key=value,...` alert label matchers; the rule's labels must contain **all** pairs.                                         |
+| `grafana/variables`            | `getGrafanaVariables`    | `name=value,...` dashboard template variable overrides applied to the entity's panel queries (parse with `parseVariables`). |
 
 The dashboard annotations combine with AND — a dashboard must pass every one
 the entity carries. Empty annotation values are treated as absent. The

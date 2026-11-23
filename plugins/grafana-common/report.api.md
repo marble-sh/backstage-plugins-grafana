@@ -18,6 +18,9 @@ export const getDashboardUid: (entity: Entity) => string | undefined;
 export const getGrafanaInstanceName: (entity: Entity) => string | undefined;
 
 // @public
+export const getGrafanaVariables: (entity: Entity) => string | undefined;
+
+// @public
 export type GetPanelDataResponse = GrafanaPanelData;
 
 // @public
@@ -42,6 +45,9 @@ export const GRAFANA_ANNOTATION_LEGACY_HOST_ID = 'grafana/host-id';
 
 // @public
 export const GRAFANA_ANNOTATION_TAG_SELECTOR = 'grafana/tag-selector';
+
+// @public
+export const GRAFANA_ANNOTATION_VARIABLES = 'grafana/variables';
 
 // @public
 export type GrafanaAlert = {
@@ -161,4 +167,9 @@ export function parseLabelSelector(
 
 // @public
 export function parseTagSelector(selector: string | undefined): string[];
+
+// @public
+export function parseVariables(
+  annotation: string | undefined,
+): Record<string, string>;
 ```

@@ -24,6 +24,10 @@ import { Entity } from '@backstage/catalog-model';
  */
 export const GRAFANA_ANNOTATION_INSTANCE = 'grafana/instance';
 
+// Internal name for the deprecated key so the fallback reader below does not
+// have to reference its own deprecated public export.
+const LEGACY_HOST_ID = 'grafana/host-id';
+
 /**
  * Legacy alias for {@link GRAFANA_ANNOTATION_INSTANCE}, read as a fallback
  * only when `grafana/instance` is absent. Predecessor plugins used this key
@@ -36,7 +40,7 @@ export const GRAFANA_ANNOTATION_INSTANCE = 'grafana/instance';
  *
  * @public
  */
-export const GRAFANA_ANNOTATION_LEGACY_HOST_ID = 'grafana/host-id';
+export const GRAFANA_ANNOTATION_LEGACY_HOST_ID = LEGACY_HOST_ID;
 
 /**
  * Selects the dashboards shown for an entity: a comma-separated list of
@@ -74,6 +78,20 @@ export const GRAFANA_ANNOTATION_TAG_SELECTOR = 'grafana/tag-selector';
 export const GRAFANA_ANNOTATION_ALERT_LABEL_SELECTOR =
   'grafana/alert-label-selector';
 
+/**
+ * A comma-separated list of `name=value` pairs supplying dashboard template
+ * variable values for an entity, e.g. `organization=my-org, repository=my-repo`.
+ *
+ * Applied when panel data is queried in the entity's context: each pair
+ * overrides that variable's saved value, the same way `var-<name>` URL
+ * parameters override saved values in Grafana's own UI. Names must be valid
+ * Grafana variable names (`[A-Za-z_][A-Za-z0-9_]*`); malformed segments are
+ * ignored (see {@link parseVariables}).
+ *
+ * @public
+ */
+export const GRAFANA_ANNOTATION_VARIABLES = 'grafana/variables';
+
 const read = (entity: Entity, key: string): string | undefined => {
   const value = entity.metadata.annotations?.[key];
   return value ? value : undefined;
@@ -87,8 +105,7 @@ const read = (entity: Entity, key: string): string | undefined => {
  * @public
  */
 export const getGrafanaInstanceName = (entity: Entity): string | undefined =>
-  read(entity, GRAFANA_ANNOTATION_INSTANCE) ??
-  read(entity, GRAFANA_ANNOTATION_LEGACY_HOST_ID);
+  read(entity, GRAFANA_ANNOTATION_INSTANCE) ?? read(entity, LEGACY_HOST_ID);
 
 /**
  * Returns the dashboard selector expression for an entity, if any.
@@ -123,6 +140,15 @@ export const getAlertLabelSelector = (entity: Entity): string | undefined =>
   read(entity, GRAFANA_ANNOTATION_ALERT_LABEL_SELECTOR);
 
 /**
+ * Returns the raw dashboard variable overrides annotation for an entity, if
+ * any (see {@link GRAFANA_ANNOTATION_VARIABLES}).
+ *
+ * @public
+ */
+export const getGrafanaVariables = (entity: Entity): string | undefined =>
+  read(entity, GRAFANA_ANNOTATION_VARIABLES);
+
+/**
  * Returns `true` when an entity carries an annotation that selects Grafana
  * dashboards, and therefore has dashboard content to display.
  *
@@ -131,9 +157,9 @@ export const getAlertLabelSelector = (entity: Entity): string | undefined =>
 export const isDashboardsAvailable = (entity: Entity): boolean =>
   Boolean(
     getGrafanaInstanceName(entity) ||
-      getDashboardSelector(entity) ||
-      getDashboardUid(entity) ||
-      getTagSelector(entity),
+    getDashboardSelector(entity) ||
+    getDashboardUid(entity) ||
+    getTagSelector(entity),
   );
 
 /**

@@ -15,7 +15,8 @@ updates:
     labels:
       - dependencies
       - github-actions
-
-ignore:
-  - dependency-name: changesets/action
-    update-types: ['version-update:semver-major']
+    ignore:
+      # changesets/action majors track @changesets/cli majors — the pair must
+      # move together (see release.yml), so never auto-bump the action alone.
+      - dependency-name: changesets/action
+        update-types: ['version-update:semver-major']

@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
-import { parseLabelSelector, parseTagSelector } from './selectors';
+import {
+  parseLabelSelector,
+  parseTagSelector,
+  parseVariables,
+} from './selectors';
 
 describe('parseLabelSelector', () => {
   it('parses a comma-separated key=value string', () => {
@@ -65,5 +69,31 @@ describe('parseTagSelector', () => {
   it('returns an empty array for undefined or empty input', () => {
     expect(parseTagSelector(undefined)).toEqual([]);
     expect(parseTagSelector('')).toEqual([]);
+  });
+});
+
+describe('parseVariables', () => {
+  it('parses name=value pairs, trimming whitespace', () => {
+    expect(
+      parseVariables('organization=my-org, repository = my-repo '),
+    ).toEqual({ organization: 'my-org', repository: 'my-repo' });
+  });
+
+  it('keeps = characters inside values and allows url-ish values', () => {
+    expect(parseVariables('filter=a=b, repo=org/name')).toEqual({
+      filter: 'a=b',
+      repo: 'org/name',
+    });
+  });
+
+  it('ignores malformed segments, invalid variable names, and empty values', () => {
+    expect(
+      parseVariables('no-equals, =value, 1bad=x, bad-name=x, ok_1=yes, empty='),
+    ).toEqual({ ok_1: 'yes' });
+  });
+
+  it('returns an empty object for undefined or empty input', () => {
+    expect(parseVariables(undefined)).toEqual({});
+    expect(parseVariables('')).toEqual({});
   });
 });

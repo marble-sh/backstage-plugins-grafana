@@ -20,7 +20,6 @@ import {
   GRAFANA_ANNOTATION_DASHBOARD_SELECTOR,
   GRAFANA_ANNOTATION_DASHBOARD_UID,
   GRAFANA_ANNOTATION_INSTANCE,
-  GRAFANA_ANNOTATION_LEGACY_HOST_ID,
   GRAFANA_ANNOTATION_TAG_SELECTOR,
   getAlertLabelSelector,
   getDashboardSelector,
@@ -42,7 +41,6 @@ const entityWith = (annotations: Record<string, string>): Entity => ({
 describe('grafana annotations', () => {
   it('exposes the well-known annotation keys', () => {
     expect(GRAFANA_ANNOTATION_INSTANCE).toBe('grafana/instance');
-    expect(GRAFANA_ANNOTATION_LEGACY_HOST_ID).toBe('grafana/host-id');
     expect(GRAFANA_ANNOTATION_DASHBOARD_SELECTOR).toBe(
       'grafana/dashboard-selector',
     );
@@ -65,7 +63,7 @@ describe('grafana annotations', () => {
 
     it('falls back to the deprecated host-id alias', () => {
       const entity = entityWith({
-        [GRAFANA_ANNOTATION_LEGACY_HOST_ID]: 'prod',
+        'grafana/host-id': 'prod',
       });
       expect(getGrafanaInstanceName(entity)).toBe('prod');
       expect(isDashboardsAvailable(entity)).toBe(true);
@@ -78,7 +76,7 @@ describe('grafana annotations', () => {
         getGrafanaInstanceName(
           entityWith({
             [GRAFANA_ANNOTATION_INSTANCE]: 'primary',
-            [GRAFANA_ANNOTATION_LEGACY_HOST_ID]: 'legacy',
+            'grafana/host-id': 'legacy',
           }),
         ),
       ).toBe('primary');
@@ -87,14 +85,12 @@ describe('grafana annotations', () => {
         getGrafanaInstanceName(
           entityWith({
             [GRAFANA_ANNOTATION_INSTANCE]: '',
-            [GRAFANA_ANNOTATION_LEGACY_HOST_ID]: 'legacy',
+            'grafana/host-id': 'legacy',
           }),
         ),
       ).toBe('legacy');
       expect(
-        getGrafanaInstanceName(
-          entityWith({ [GRAFANA_ANNOTATION_LEGACY_HOST_ID]: '' }),
-        ),
+        getGrafanaInstanceName(entityWith({ 'grafana/host-id': '' })),
       ).toBeUndefined();
     });
   });

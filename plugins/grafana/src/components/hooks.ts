@@ -20,9 +20,11 @@ import {
   getDashboardSelector,
   getDashboardUid,
   getGrafanaInstanceName,
+  getGrafanaVariables,
   getTagSelector,
   parseLabelSelector,
   parseTagSelector,
+  parseVariables,
 } from '@marble-sh/backstage-plugin-grafana-common';
 import { ListAlertsRequest, ListDashboardsRequest } from '../api';
 
@@ -44,4 +46,14 @@ export const useAlertsRequest = (): ListAlertsRequest => {
     instanceName: getGrafanaInstanceName(entity),
     labelSelector: parseLabelSelector(getAlertLabelSelector(entity)),
   };
+};
+
+/**
+ * Reads the current entity's `grafana/variables` annotation into dashboard
+ * template variable overrides, or `undefined` when the entity has none.
+ */
+export const useGrafanaVariables = (): Record<string, string> | undefined => {
+  const { entity } = useEntity();
+  const variables = parseVariables(getGrafanaVariables(entity));
+  return Object.keys(variables).length > 0 ? variables : undefined;
 };

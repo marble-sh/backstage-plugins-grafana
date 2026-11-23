@@ -36,7 +36,11 @@ function stubService(overrides: Partial<GrafanaService> = {}): {
 
 async function makeApp(
   service: GrafanaService,
-  options: { allowOnDemandRefresh?: boolean; allowPanelQueries?: boolean } = {},
+  options: {
+    allowOnDemandRefresh?: boolean;
+    allowPanelQueries?: boolean;
+    allowedVariableOverrides?: string[];
+  } = {},
 ) {
   const app = express();
   app.use(await createRouter({ grafanaService: service, ...options }));
@@ -321,6 +325,130 @@ describe('createRouter', () => {
         to: 'now',
         refresh: false,
       });
+    });
+
+    it('GET .../panels/:panelId/data forwards var-<name> parameters as variable overrides', async () => {
+      const getPanelData = jest
+        .fn()
+        .mockResolvedValue({ panelId: 3, series: [] });
+      const { service } = stubService({ getPanelData });
+      const app = await makeApp(service);
+
+      const res = await request(app)
+        .get('/instances/prod/dashboards/d1/panels/3/data')
+        .query(
+          'from=now-1h&to=now&var-repository=org%2Fmy-repo&var-env=a&var-env=b',
+        );
+
+      expect(res.status).toBe(200);
+      expect(getPanelData).toHaveBeenCalledWith({
+        instanceName: 'prod',
+        dashboardUid: 'd1',
+        panelId: 3,
+        from: 'now-1h',
+        to: 'now',
+        variables: { repository: 'org/my-repo', env: ['a', 'b'] },
+        refresh: false,
+      });
+    });
+
+    it('GET .../panels/:panelId/data rejects invalid variable overrides', async () => {
+      const getPanelData = jest
+        .fn()
+        .mockResolvedValue({ panelId: 3, series: [] });
+      const { service } = stubService({ getPanelData });
+      const app = await makeApp(service);
+
+      const badName = await request(app).get(
+        '/instances/prod/dashboards/d1/panels/3/data?var-bad-name=x',
+      );
+      expect(badName.status).toBe(400);
+      expect(badName.body).toEqual({ error: 'InputError' });
+
+      const oversized = await request(app).get(
+        `/instances/prod/dashboards/d1/panels/3/data?var-ok=${'x'.repeat(
+          1001,
+        )}`,
+      );
+      expect(oversized.status).toBe(400);
+      expect(oversized.body).toEqual({ error: 'InputError' });
+
+      const tooMany = await request(app).get(
+        `/instances/prod/dashboards/d1/panels/3/data?${Array.from(
+          { length: 33 },
+          (_, i) => `var-v${i}=x`,
+        ).join('&')}`,
+      );
+      expect(tooMany.status).toBe(400);
+      expect(tooMany.body).toEqual({ error: 'InputError' });
+
+      expect(getPanelData).not.toHaveBeenCalled();
+    });
+
+    it('GET .../panels/:panelId/data enforces the variable-override allowlist', async () => {
+      const getPanelData = jest
+        .fn()
+        .mockResolvedValue({ panelId: 3, series: [] });
+      const { service } = stubService({ getPanelData });
+      const app = await makeApp(service, {
+        allowedVariableOverrides: ['repository'],
+      });
+
+      const allowed = await request(app).get(
+        '/instances/prod/dashboards/d1/panels/3/data?var-repository=org%2Fmy-repo',
+      );
+      expect(allowed.status).toBe(200);
+      expect(getPanelData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variables: { repository: 'org/my-repo' },
+        }),
+      );
+
+      const denied = await request(app).get(
+        '/instances/prod/dashboards/d1/panels/3/data?var-env=prod',
+      );
+      expect(denied.status).toBe(403);
+      expect(denied.body).toEqual({ error: 'NotAllowedError' });
+      expect(getPanelData).toHaveBeenCalledTimes(1);
+    });
+
+    it('GET .../panels/:panelId/data rejects every override when the allowlist is empty', async () => {
+      const getPanelData = jest
+        .fn()
+        .mockResolvedValue({ panelId: 3, series: [] });
+      const { service } = stubService({ getPanelData });
+      const app = await makeApp(service, { allowedVariableOverrides: [] });
+
+      const denied = await request(app).get(
+        '/instances/prod/dashboards/d1/panels/3/data?var-env=prod',
+      );
+      expect(denied.status).toBe(403);
+      expect(denied.body).toEqual({ error: 'NotAllowedError' });
+
+      // Requests without overrides are unaffected.
+      const noOverrides = await request(app).get(
+        '/instances/prod/dashboards/d1/panels/3/data',
+      );
+      expect(noOverrides.status).toBe(200);
+      expect(getPanelData).toHaveBeenCalledTimes(1);
+    });
+
+    it('GET .../panels/:panelId/data rejects a request mixing allowed and denied overrides', async () => {
+      const getPanelData = jest
+        .fn()
+        .mockResolvedValue({ panelId: 3, series: [] });
+      const { service } = stubService({ getPanelData });
+      const app = await makeApp(service, {
+        allowedVariableOverrides: ['repository'],
+      });
+
+      const res = await request(app).get(
+        '/instances/prod/dashboards/d1/panels/3/data?var-repository=ok&var-evil=1',
+      );
+
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({ error: 'NotAllowedError' });
+      expect(getPanelData).not.toHaveBeenCalled();
     });
 
     it('GET .../panels/:panelId/data honors refresh=true', async () => {

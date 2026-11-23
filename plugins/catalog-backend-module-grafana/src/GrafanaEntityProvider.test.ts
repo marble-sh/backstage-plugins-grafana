@@ -23,7 +23,10 @@ import {
   EntityProviderConnection,
 } from '@backstage/plugin-catalog-node';
 import { catalogServiceMock } from '@backstage/plugin-catalog-node/testUtils';
-import { GrafanaClient } from '@marble-sh/backstage-plugin-grafana-node';
+import {
+  GrafanaClient,
+  GrafanaInstanceConfig,
+} from '@marble-sh/backstage-plugin-grafana-node';
 import { GrafanaEntityProvider } from './GrafanaEntityProvider';
 import { GrafanaDiscoveryConfig } from './config';
 
@@ -73,6 +76,32 @@ describe('GrafanaEntityProvider', () => {
       taskRunner: new ImmediateTaskRunner(),
     });
     expect(provider.getProviderName()).toBe('GrafanaEntityProvider');
+  });
+
+  it('never retains the scaffolder write token on read instances', async () => {
+    const seen: GrafanaInstanceConfig[] = [];
+    const provider = new GrafanaEntityProvider({
+      instances: [
+        { ...instanceConfig('prod'), scaffolderToken: 'write-secret' },
+      ],
+      discovery,
+      logger: mockServices.logger.mock(),
+      taskRunner: new ImmediateTaskRunner(),
+      clientFactory: instance => {
+        seen.push(instance);
+        return fakeClient([]);
+      },
+    });
+
+    const connection: jest.Mocked<EntityProviderConnection> = {
+      applyMutation: jest.fn(),
+      refresh: jest.fn(),
+    };
+    await provider.connect(connection);
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0].token).toBe('secret');
+    expect(seen[0]).not.toHaveProperty('scaffolderToken');
   });
 
   it('reads dashboards and applies a full mutation on the scheduled run', async () => {

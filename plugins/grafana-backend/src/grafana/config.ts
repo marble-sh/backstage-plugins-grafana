@@ -56,6 +56,13 @@ export type GrafanaBackendConfig = {
   allowPanelQueries: boolean;
   /** Time-to-live for cached panel listings and panel data. */
   panelDataCacheTtl: HumanDuration;
+  /**
+   * When set, only these template variable names may be overridden via
+   * `var-<name>` parameters on the panel data route (`[]` rejects all
+   * overrides). Absent means any variable reference in the queries may be
+   * overridden. Note: YAML `null` (a bare key) also reads as absent.
+   */
+  allowedVariableOverrides?: string[];
 };
 
 const DEFAULT_CACHE_TTL: HumanDuration = { minutes: 15 };
@@ -98,5 +105,8 @@ export function readGrafanaConfig(rootConfig: Config): GrafanaBackendConfig {
     panelDataCacheTtl:
       (config?.getOptional('panelDataCacheTtl') as HumanDuration | undefined) ??
       DEFAULT_PANEL_DATA_CACHE_TTL,
+    allowedVariableOverrides: config?.getOptionalStringArray(
+      'allowedVariableOverrides',
+    ),
   };
 }

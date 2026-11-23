@@ -1,5 +1,5 @@
 # Example catalog-info.yaml using every Grafana annotation, with values
-# validated against a real Grafana Cloud stack (all five are optional —
+# validated against a real Grafana Cloud stack (all six are optional —
 # see the frontend README's "Entity annotations" section for semantics).
 #
 # PREREQUISITE: `grafana/instance` matches the `name` of an entry under
@@ -55,6 +55,12 @@ metadata:
     # (High CPU usage, High memory usage, Instance down, Low disk space),
     # which all carry the label `for: linux`.
     grafana/alert-label-selector: for=linux
+
+    # name=value pairs, comma-separated: dashboard template variable values
+    # applied to this entity's panel queries, overriding the values saved on
+    # the dashboard (like var-<name> URL parameters in Grafana's own UI).
+    # This is how one shared dashboard renders each entity's own data.
+    grafana/variables: instance_filter=.+, cluster=prod
 spec:
   type: service
   lifecycle: experimental

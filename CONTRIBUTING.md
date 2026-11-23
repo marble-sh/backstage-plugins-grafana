@@ -20,16 +20,17 @@ yarn install
 
 Everything is driven from the repo root:
 
-| Command                  | What it does                                             |
-| ------------------------ | -------------------------------------------------------- |
-| `yarn test`              | Run the test suite (watch mode; use `CI=true` for once). |
-| `yarn test:all`          | Run all tests with coverage.                             |
-| `yarn tsc:full`          | Full type check with declarations.                       |
-| `yarn lint:all`          | Lint every package.                                      |
-| `yarn prettier:check`    | Check formatting (`prettier:fix` to apply).              |
-| `yarn build:all`         | Build every package.                                     |
-| `yarn build:api-reports` | Regenerate the `report.api.md` API reports.              |
-| `yarn new`               | Scaffold a new package (`@marble-sh` scope).             |
+| Command                   | What it does                                               |
+| ------------------------- | ---------------------------------------------------------- |
+| `yarn test`               | Run the test suite (watch mode; use `CI=true` for once).   |
+| `yarn test:all`           | Run all tests with coverage.                               |
+| `yarn tsc:full`           | Full type check with declarations.                         |
+| `yarn lint:all`           | Lint every package.                                        |
+| `yarn prettier:check`     | Check formatting (`prettier:fix` to apply).                |
+| `yarn build:all`          | Build every package.                                       |
+| `yarn build:api-reports`  | Regenerate the `report.api.md` API reports.                |
+| `yarn build:knip-reports` | Regenerate the `knip-report.md` unused-dependency reports. |
+| `yarn new`                | Scaffold a new package (`@marble-sh` scope).               |
 
 To work on a single package:
 
@@ -110,8 +111,9 @@ and tags releases.
   auto-labeler applies `area/*` labels from the changed paths, but the type
   and `semver:*` labels are yours to set.
 - Make sure `yarn fix:check`, `yarn lint:all`, `yarn tsc:full`,
-  `yarn prettier:check`, `yarn build:api-reports`, and `yarn test` all pass. CI
-  runs the same steps on Node 22 and 24.
+  `yarn prettier:check`, `yarn build:api-reports`, `yarn build:knip-reports`,
+  and `yarn test` all pass. CI runs the same steps on Node 22 and 24, plus
+  `yarn backstage-cli repo list-deprecations` and an 80% coverage floor.
 - Use clear commit messages ([Conventional Commits](https://www.conventionalcommits.org/)
   are encouraged, e.g. `feat(grafana): ...`).
 - PRs are **squash-merged**, so the PR title becomes the commit message and

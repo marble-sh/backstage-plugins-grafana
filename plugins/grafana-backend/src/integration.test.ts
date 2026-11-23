@@ -51,6 +51,9 @@ const prodInstance = {
   title: 'Production',
   baseUrl: PROD_BASE_URL,
   token: PROD_TOKEN,
+  // Present on the fixture so the strict /instances response schema proves
+  // the write token never leaks into any API response.
+  scaffolderToken: 'prod-write-token',
 };
 const stagingInstance = {
   name: 'staging',
@@ -77,7 +80,7 @@ const instanceSchema = z
   .object({
     name: z.string().min(1),
     title: z.string().min(1),
-    url: z.string().url(),
+    url: z.url(),
   })
   .strict() satisfies z.ZodType<GrafanaInstanceInfo>;
 
@@ -89,9 +92,9 @@ const dashboardSchema = z
   .object({
     uid: z.string(),
     title: z.string(),
-    url: z.string().url(),
+    url: z.url(),
     folderTitle: z.string().optional(),
-    folderUrl: z.string().url().optional(),
+    folderUrl: z.url().optional(),
     tags: z.array(z.string()),
     instanceName: z.string(),
   })
@@ -116,7 +119,7 @@ const alertSchema = z
   .object({
     name: z.string(),
     state: alertStateSchema,
-    url: z.string().url(),
+    url: z.url(),
     labels: z.record(z.string(), z.string()),
     folderTitle: z.string().optional(),
     instanceName: z.string(),
@@ -174,7 +177,7 @@ const panelDataSchema = z
 
 const errorResponseSchema = z
   .object({
-    error: z.object({ name: z.string(), message: z.string() }).passthrough(),
+    error: z.object({ name: z.string(), message: z.string() }).loose(),
     request: z.object({ method: z.string(), url: z.string() }).strict(),
     response: z.object({ statusCode: z.number().int() }).strict(),
   })
@@ -1226,6 +1229,65 @@ describe('grafana backend integration', () => {
       expect(
         expectJson(data, errorResponseSchema, 'panel data disabled').error.name,
       ).toBe('NotAllowedError');
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('enforces the configured variable-override allowlist end to end', async () => {
+      const spy = installGrafanaStub();
+      // `apis: none` makes the allowed-name outcome deterministic (404 from
+      // the disabled dashboards API) without stubbing a dashboard model.
+      const instance = { ...prodInstance, apis: { dashboards: 'none' } };
+
+      // Deny-all is the explicit empty list — this test pins the full
+      // config→plugin→router wiring, where a truthiness shortcut on `[]`
+      // would silently fail open.
+      const denyAll = await startBackend({
+        data: {
+          grafana: {
+            instances: [instance],
+            allowedVariableOverrides: [],
+          },
+        },
+      });
+      const denied = await authHeader(
+        request(denyAll).get(
+          '/api/grafana/instances/prod/dashboards/abc/panels/1/data?var-env=x',
+        ),
+      );
+      expect(denied.status).toBe(403);
+      expect(
+        expectJson(denied, errorResponseSchema, 'deny-all override').error.name,
+      ).toBe('NotAllowedError');
+
+      const allowSome = await startBackend({
+        data: {
+          grafana: {
+            instances: [instance],
+            allowedVariableOverrides: ['repository'],
+          },
+        },
+      });
+      const blocked = await authHeader(
+        request(allowSome).get(
+          '/api/grafana/instances/prod/dashboards/abc/panels/1/data?var-env=x',
+        ),
+      );
+      const allowed = await authHeader(
+        request(allowSome).get(
+          '/api/grafana/instances/prod/dashboards/abc/panels/1/data?var-repository=x',
+        ),
+      );
+      expect(blocked.status).toBe(403);
+      expect(
+        expectJson(blocked, errorResponseSchema, 'unlisted override').error
+          .name,
+      ).toBe('NotAllowedError');
+      // The allowed name passes the allowlist and fails later on the
+      // disabled dashboards API instead.
+      expect(allowed.status).toBe(404);
+      expect(
+        expectJson(allowed, errorResponseSchema, 'allowed override').error.name,
+      ).toBe('NotFoundError');
       expect(spy).not.toHaveBeenCalled();
     });
   });

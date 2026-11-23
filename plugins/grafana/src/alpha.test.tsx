@@ -86,7 +86,7 @@ const annotatedEntity: Entity = {
 
 describe('grafana plugin (new frontend system)', () => {
   it('registers every extension under the id the app resolves', () => {
-    expect(grafanaPlugin.id).toBe('grafana');
+    expect(grafanaPlugin.pluginId).toBe('grafana');
     expect(grafanaPlugin.getExtension('api:grafana')).toBeDefined();
     expect(grafanaPlugin.getExtension('page:grafana')).toBeDefined();
     expect(

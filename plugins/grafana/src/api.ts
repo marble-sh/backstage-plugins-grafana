@@ -95,6 +95,12 @@ export type GetPanelDataRequest = {
   from?: string;
   /** Range end, same forms as `from`. Defaults to `now`. */
   to?: string;
+  /**
+   * Template variable values applied over the dashboard's saved values
+   * (sent as `var-<name>` parameters, Grafana's own URL convention) — for
+   * example from the entity's `grafana/variables` annotation.
+   */
+  variables?: Record<string, string | string[]>;
   /** Force a live read, bypassing the backend's panel cache. */
   refresh?: boolean;
 };
@@ -222,6 +228,11 @@ export class GrafanaApiClient implements GrafanaApi {
     }
     if (request.to) {
       params.set('to', request.to);
+    }
+    for (const [name, value] of Object.entries(request.variables ?? {})) {
+      for (const single of Array.isArray(value) ? value : [value]) {
+        params.append(`var-${name}`, single);
+      }
     }
     if (request.refresh) {
       params.set('refresh', 'true');

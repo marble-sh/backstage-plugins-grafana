@@ -51,6 +51,23 @@ describe('readGrafanaInstances', () => {
     ]);
   });
 
+  it('reads the optional scaffolder token', () => {
+    const [instance] = read({
+      grafana: {
+        instances: [
+          {
+            name: 'prod',
+            baseUrl: 'https://grafana.example.com',
+            token: 'read-token',
+            scaffolderToken: 'write-token',
+          },
+        ],
+      },
+    });
+    expect(instance.token).toBe('read-token');
+    expect(instance.scaffolderToken).toBe('write-token');
+  });
+
   it('derives the cloud namespace from stackId', () => {
     const [instance] = read({
       grafana: {

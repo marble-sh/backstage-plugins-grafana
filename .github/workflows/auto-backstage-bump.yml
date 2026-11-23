@@ -1,0 +1,141 @@
+name: Auto Backstage bump
+
+# Weekly check for a new Backstage release; opens a bump PR when one exists.
+# Single-repo edition of the auto-version-bump pipeline the
+# backstage/community-plugins repo runs for its workspaces.
+#
+# Note: PRs created with the default GITHUB_TOKEN do not trigger `pull_request`
+# workflows (same GitHub limitation version-bump.yml documents), so CI will not
+# start on the bump PR by itself — close and reopen the PR (or push to its
+# branch) to run checks.
+on:
+  schedule:
+    # Tuesday 06:00 UTC — Backstage mainline releases land on Tuesdays.
+    - cron: '0 6 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the bump branch
+  pull-requests: write # open the bump PR
+
+concurrency:
+  group: auto-backstage-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump Backstage release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Never run from forks.
+    if: github.repository == 'marble-sh/backstage-plugins-grafana'
+    env:
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Corepack must be enabled before setup-node so the yarn cache resolves
+      # against the pinned Yarn 4, not the runner's preinstalled Yarn 1.
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.x
+          cache: yarn
+
+      - name: Determine latest Backstage release
+        id: rel
+        run: |
+          current=$(jq -r .version backstage.json)
+          latest=$(curl -fsSL https://versions.backstage.io/v1/tags/main/manifest.json | jq -r .releaseVersion)
+          echo "current=$current latest=$latest"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Skip when an open bump PR already exists
+        id: existing
+        if: steps.rel.outputs.latest != steps.rel.outputs.current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: chore/backstage-${{ steps.rel.outputs.latest }}
+        run: |
+          open=$(gh pr list --head "$BRANCH" --state open --json number --jq length)
+          echo "open=$open" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        if: steps.rel.outputs.latest != steps.rel.outputs.current && steps.existing.outputs.open == '0'
+        run: yarn install --immutable
+
+      - name: Bump to the latest release
+        if: steps.rel.outputs.latest != steps.rel.outputs.current && steps.existing.outputs.open == '0'
+        env:
+          LATEST: ${{ steps.rel.outputs.latest }}
+        run: |
+          yarn backstage-cli versions:bump --release "$LATEST"
+          # versions:bump rewrites the yarn-plugin spec with double quotes.
+          yarn prettier --write .yarnrc.yml
+          # API reports read dist-types; create them before generating.
+          yarn tsc
+          yarn build:api-reports
+          yarn build:knip-reports
+
+      - name: Write changeset
+        if: steps.rel.outputs.latest != steps.rel.outputs.current && steps.existing.outputs.open == '0'
+        env:
+          LATEST: ${{ steps.rel.outputs.latest }}
+          CURRENT: ${{ steps.rel.outputs.current }}
+        run: |
+          # An API-surface change makes the bump at least minor
+          # (docs/versioning.md); a pure dependency bump is a patch.
+          if git diff --quiet -- 'plugins/*/report*.api.md'; then
+            level='patch'
+          else
+            level='minor'
+          fi
+          file=".changeset/backstage-$(echo "$LATEST" | tr . -).md"
+          {
+            echo '---'
+            yarn workspaces list --no-private --json |
+              jq -r --arg lvl "$level" "\"'\" + .name + \"': \" + \$lvl"
+            echo '---'
+            echo ''
+            echo "Bump Backstage to release ${LATEST} (from ${CURRENT})."
+          } > "$file"
+          cat "$file"
+
+      - name: Create pull request
+        if: steps.rel.outputs.latest != steps.rel.outputs.current && steps.existing.outputs.open == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.rel.outputs.latest }}
+          CURRENT: ${{ steps.rel.outputs.current }}
+          BRANCH: chore/backstage-${{ steps.rel.outputs.latest }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$BRANCH"
+          git add backstage.json .yarnrc.yml yarn.lock package.json \
+            plugins/*/package.json \
+            ".changeset/backstage-$(echo "$LATEST" | tr . -).md" \
+            plugins/*/report*.api.md plugins/*/knip-report.md
+          git commit -m "chore(deps): bump Backstage to $LATEST"
+          git push -f -u origin "$BRANCH"
+          {
+            printf '%s\n' \
+              "Automated bump of the pinned Backstage release from \`$CURRENT\` to \`$LATEST\`." \
+              '' \
+              "Review the API-report diff (if any) and the [upgrade helper](https://backstage.github.io/upgrade-helper/?from=$CURRENT&to=$LATEST&yarnPlugin=1)." \
+              'The included changeset is patch-level unless an API report changed.' \
+              '' \
+              'Note: CI does not start automatically on PRs opened with the workflow token — close and reopen this PR to run checks.'
+          } > "$RUNNER_TEMP/pr-body.md"
+          gh pr create \
+            --title "chore(deps): bump Backstage to $LATEST" \
+            --label dependencies \
+            --body-file "$RUNNER_TEMP/pr-body.md"

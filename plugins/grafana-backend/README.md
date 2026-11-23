@@ -79,6 +79,10 @@ grafana:
   allowPanelQueries: true
   # How long live panel data is cached (see "Behavior flags" below).
   panelDataCacheTtl: { seconds: 30 }
+  # Optional: restrict which template variables may be overridden via
+  # var-<name> parameters on the panel-data route (absent = all; [] = none).
+  # Deny-all must be the explicit `[]` — a bare key is YAML null = absent.
+  # allowedVariableOverrides: [repository, env]
 
   # Optional background refresh. Omit to fetch lazily on request instead.
   schedule:
@@ -103,16 +107,17 @@ grafana:
 
 ### Instance options
 
-| Key              | Required | Description                                                                                                                                                          |
-| ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`           | yes      | Unique, stable id. Referenced by the `grafana/instance` entity annotation and by the REST API.                                                                       |
-| `baseUrl`        | yes      | Base URL of the Grafana instance, without a trailing slash.                                                                                                          |
-| `token`          | yes      | Service-account token used as a Bearer token — see [Creating the Grafana service account and token](#creating-the-grafana-service-account-and-token). Marked secret. |
-| `title`          | no       | Human-readable title. Defaults to `name`.                                                                                                                            |
-| `namespace`      | no       | App Platform namespace. Defaults to `default` (self-hosted) or `stacks-<stackId>` (cloud).                                                                           |
-| `stackId`        | no       | **Numeric** Grafana Cloud stack id (not the stack slug), used to derive the namespace (see below).                                                                   |
-| `apis`           | no       | Override or disable the API used per data type (see below).                                                                                                          |
-| `resolveFolders` | no       | `false` skips the `/api/folders` folder lookup (see below). Defaults to `true`.                                                                                      |
+| Key               | Required | Description                                                                                                                                                          |
+| ----------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`            | yes      | Unique, stable id. Referenced by the `grafana/instance` entity annotation and by the REST API.                                                                       |
+| `baseUrl`         | yes      | Base URL of the Grafana instance, without a trailing slash.                                                                                                          |
+| `token`           | yes      | Service-account token used as a Bearer token — see [Creating the Grafana service account and token](#creating-the-grafana-service-account-and-token). Marked secret. |
+| `scaffolderToken` | no       | Separate write-capable token used **only** by the scaffolder module's write actions, letting `token` stay read-only. Marked secret.                                  |
+| `title`           | no       | Human-readable title. Defaults to `name`.                                                                                                                            |
+| `namespace`       | no       | App Platform namespace. Defaults to `default` (self-hosted) or `stacks-<stackId>` (cloud).                                                                           |
+| `stackId`         | no       | **Numeric** Grafana Cloud stack id (not the stack slug), used to derive the namespace (see below).                                                                   |
+| `apis`            | no       | Override or disable the API used per data type (see below).                                                                                                          |
+| `resolveFolders`  | no       | `false` skips the `/api/folders` folder lookup (see below). Defaults to `true`.                                                                                      |
 
 ### API selection
 
@@ -183,6 +188,35 @@ All four combinations:
 | `true`                 | `false`         | Misses return empty, but an explicit `?refresh=true` or `POST …/refresh` still reads live and fills the store.                                                                   |
 | `false`                | `true`          | Users cannot force refreshes, but a cold store still fills itself lazily on first read.                                                                                          |
 | `false`                | `false`         | Grafana is contacted **only** by the schedule (configure one, or the API serves empty forever). With `allowPanelQueries: false` as well, Grafana traffic is fully deterministic. |
+
+### Restricting variable overrides (`allowedVariableOverrides`)
+
+The panel data route accepts `var-<name>` parameters that override dashboard
+template variable values (see [query parameters](#query-parameters)). Variable
+values are substituted into the dashboard's query text before it is executed
+with the instance's service-account token, so any caller may reshape what
+those queries select — see
+[security considerations](#security-considerations). This option pins that
+surface down:
+
+- Absent (default): any variable reference occurring in the panel's queries
+  may be overridden — including Grafana built-ins such as `$__interval`, not
+  only variables declared on the dashboard.
+- A list of names: only those variables may be overridden; any other
+  `var-<name>` parameter responds `403 NotAllowedError`.
+- `[]`: every override is rejected (all panels stick to their saved values).
+
+> **Deny-all must be the explicit empty list `[]`.** Writing the key with no
+> value (`allowedVariableOverrides:`) is YAML `null`, which reads as _absent_ —
+> i.e. silently allow-all, not deny-all.
+
+Entity `grafana/variables` annotations are applied through this same route, so
+any variable named by an annotation must be on the list.
+
+Whichever form is used, the allowlist scopes _names_ only: an allowed
+variable's value is still interpolated into the dashboard's query text, so
+allow only names whose values cannot change what the query selects (or deny
+all overrides).
 
 ### Deriving the namespace
 
@@ -256,9 +290,13 @@ In practice:
   account query access on the relevant data sources (or the RBAC
   `fixed:datasources:reader` role), or disable the panel routes with
   `grafana.allowPanelQueries: false`.
-- The **scaffolder module writes** dashboards: give that instance's service
-  account the **Editor** basic role, or (with RBAC) `fixed:dashboards:writer`
-  scoped to the folders your templates target.
+- The **scaffolder module writes** dashboards: create a **second**,
+  write-capable service account (the **Editor** basic role, or with RBAC
+  `fixed:dashboards:writer` scoped to the folders your templates target) and
+  set its token as the instance's `scaffolderToken` — the write action
+  prefers it, and `token` (used by every read path) stays Viewer. Raising the
+  shared `token` to Editor works too, but hands write credentials to the read
+  paths.
 - An instance that serves fewer features needs fewer permissions — e.g. with
   `apis.alerts: none` the alerting API is never called, so alert-rule read
   access is unnecessary.
@@ -269,6 +307,65 @@ To inspect exactly what a token is allowed to do, ask Grafana itself:
 curl -s -H "Authorization: Bearer $TOKEN" \
   "$BASE_URL/api/access-control/user/permissions" | jq
 ```
+
+## Metrics
+
+The backend emits two OpenTelemetry metrics (no-ops unless the host app runs
+an OTel SDK — see [docs/observability.md](../../docs/observability.md)):
+
+- `grafana.instance.refresh.count` (counter; attributes `instance`,
+  `result` = `ok`|`error`) — every snapshot refresh, however triggered.
+- `grafana.instance.snapshot.age` (gauge, seconds; attribute `instance`) —
+  time since the instance's last **successful** refresh in this process.
+  Absent until the first success and resets on restart.
+
+With the Prometheus exporter these surface as
+`grafana_instance_refresh_count_total` and `grafana_instance_snapshot_age`.
+Useful alerts: repeated `result="error"` increases per instance (an estate
+stack is unreachable — fan-out reads skip it silently by design), and
+`grafana_instance_snapshot_age` above ~2× your `schedule.frequency`
+(refreshes stopped landing).
+
+## Security considerations
+
+Everything this plugin does against Grafana runs under the instance's
+service-account token — Backstage users are **not** mapped to Grafana users,
+and the plugin does not integrate with the Backstage permissions framework.
+Every caller holding any valid Backstage credential therefore shares the
+service account's access. Mind the consequences:
+
+- **Panel-data variable overrides are a query-injection surface.** Template
+  variable overrides (`var-<name>` parameters, including those driven by the
+  `grafana/variables` entity annotation) are substituted into the dashboard's
+  raw query text, exactly like Grafana's own `var-` URL parameters — but in
+  Grafana those queries run with the viewing user's permissions, while here
+  they run with the service account's. For data sources that interpret query
+  text (SQL and similar), a caller can reshape a panel's query through
+  variable values. The
+  [`allowedVariableOverrides`](#restricting-variable-overrides-allowedvariableoverrides)
+  option scopes _which_ names may be overridden (absent = all, `[]` = none),
+  but it does not escape the values, so any allowed name still reaches query
+  text raw. Only allow names whose values cannot reshape a query, or disable
+  the panel routes entirely with `allowPanelQueries: false`.
+- **Keep the service account least-privilege.** Use the Viewer role plus only
+  the extra grants listed under [required permissions](#required-permissions),
+  and on instances with data-source permissions, scope `datasources:query` to
+  the data sources your dashboards actually need.
+- **Separate the scaffolder's write token.** When the
+  [scaffolder module](../scaffolder-backend-module-grafana/README.md) is
+  installed, don't raise the shared `token` to Editor — set the write-capable
+  token as the instance's `scaffolderToken`, so the read paths (including
+  panel queries) never hold write credentials. The backend plugin and catalog
+  provider strip `scaffolderToken` from the instance configs they load, so
+  only the scaffolder module ever sees it.
+- **Authenticated users can generate Grafana load.** The refresh and panel
+  routes read live from Grafana. `allowOnDemandRefresh: false`,
+  `fetchOnDemand: false`, and `allowPanelQueries: false` together make
+  Grafana traffic strictly schedule-only.
+- **Tokens never leave the backend.** They are marked `@visibility secret` in
+  the config schema, are never logged, and no API response contains them
+  (`/instances` returns only name, title, and URL). Treat any violation as a
+  vulnerability per the [security policy](../../SECURITY.md).
 
 ## REST API
 
@@ -304,6 +401,15 @@ valid Backstage credential.
 - `from` / `to` — (on the panel data route) the query range, as Grafana time
   expressions: `now`, `now-<n><s|m|h|d|w>`, or epoch milliseconds. Default
   `now-6h` … `now`.
+- `var-<name>` — (on the panel data route) repeatable template variable
+  overrides, Grafana's own URL convention (e.g. `var-repository=my-repo`).
+  They win over the dashboard's saved values and also satisfy declared
+  variables that have no saved value. At most 32 variables, values up to
+  1000 characters, names `[A-Za-z_][A-Za-z0-9_]*` — violations are a `400`.
+  When `grafana.allowedVariableOverrides` is set, only the listed names may
+  be overridden — any other `var-<name>` responds `403`. Overrides are part
+  of the panel-cache key, so entities with different values never share
+  cached data.
 
 Example:
 

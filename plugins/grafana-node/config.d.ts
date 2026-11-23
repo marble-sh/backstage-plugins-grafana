@@ -56,11 +56,25 @@ export interface Config {
       /**
        * A Grafana service account token used as a Bearer token for all
        * requests to this instance. The token only needs read (Viewer)
-       * permissions unless the scaffolder module is used.
+       * permissions unless the scaffolder module is used — and even then,
+       * `scaffolderToken` can carry the write role so this one stays
+       * read-only.
        *
        * @visibility secret
        */
       token: string;
+
+      /**
+       * An optional, separate service-account token used ONLY by the
+       * scaffolder module's write actions. When set, `token` can stay
+       * read-only (Viewer) while this token carries the write role (Editor,
+       * or `fixed:dashboards:writer` with RBAC) — the read paths, including
+       * panel queries, then never hold write credentials. When absent, the
+       * scaffolder falls back to `token`.
+       *
+       * @visibility secret
+       */
+      scaffolderToken?: string;
 
       /**
        * The Grafana App Platform namespace to query.

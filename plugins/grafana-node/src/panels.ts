@@ -106,7 +106,11 @@ export function extractPanels(model: unknown): ExtractedPanel[] {
   return result;
 }
 
-/** Dashboard template variables, keyed by name, with their current values. */
+/**
+ * Dashboard template variables, keyed by name, with their current values.
+ *
+ * @public
+ */
 export type TemplateVariables = Record<string, string | string[]>;
 
 /**
@@ -422,6 +426,14 @@ export function buildPanelQueries(options: {
    * dashboard win over these.
    */
   extraVariables?: TemplateVariables;
+  /**
+   * Caller-supplied variable values that WIN over the values saved on the
+   * dashboard (and over `extraVariables`), the same way `var-<name>` URL
+   * parameters override saved values in Grafana's own UI — e.g. an entity's
+   * `grafana/variables` annotation. Also satisfies otherwise-valueless
+   * declared variables, un-skipping their targets.
+   */
+  overrideVariables?: TemplateVariables;
 }): PanelQueryBuild {
   const { panel, model, range } = options;
   const declaredVariables = readDeclaredVariableNames(model);
@@ -449,6 +461,7 @@ export function buildPanelQueries(options: {
       readTemplateVariables(model),
       formatIntervalString(intervalMs),
     ),
+    ...options.overrideVariables,
   };
 
   const resolveDatasource = (target: Record<string, unknown>): unknown => {
@@ -511,7 +524,7 @@ export function buildPanelQueries(options: {
     const datasource = resolveDatasource(target);
     if (datasource === undefined) {
       warnings.push(
-        target.datasource ?? panel.datasource
+        (target.datasource ?? panel.datasource)
           ? `Query ${refId} was skipped: its datasource could not be resolved`
           : `Query ${refId} was skipped: it uses the dashboard's default datasource, which cannot be resolved through the API`,
       );
@@ -601,8 +614,7 @@ export function normalizeFrames(frames: unknown[]): NormalizedFrames {
       }
       const config = asRecord(field.config);
       const labels = asRecord(field.labels) as
-        | Record<string, string>
-        | undefined;
+        Record<string, string> | undefined;
       const name =
         (typeof config?.displayNameFromDS === 'string' &&
           config.displayNameFromDS) ||

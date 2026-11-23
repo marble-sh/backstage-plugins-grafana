@@ -57,3 +57,35 @@ export function parseTagSelector(selector: string | undefined): string[] {
     .map(tag => tag.trim())
     .filter(Boolean);
 }
+
+const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Parses the `grafana/variables` annotation (comma-separated `name=value`
+ * pairs) into a map of dashboard template variable overrides. Whitespace
+ * around names and values is trimmed; segments without a `=`, with an empty
+ * value, or whose name is not a valid Grafana variable name
+ * (`[A-Za-z_][A-Za-z0-9_]*`) are ignored.
+ *
+ * @public
+ */
+export function parseVariables(
+  annotation: string | undefined,
+): Record<string, string> {
+  if (!annotation) {
+    return {};
+  }
+  const result: Record<string, string> = {};
+  for (const segment of annotation.split(',')) {
+    const index = segment.indexOf('=');
+    if (index <= 0) {
+      continue;
+    }
+    const name = segment.slice(0, index).trim();
+    const value = segment.slice(index + 1).trim();
+    if (VARIABLE_NAME.test(name) && value) {
+      result[name] = value;
+    }
+  }
+  return result;
+}

@@ -34,6 +34,7 @@ export type GetPanelDataRequest = {
   panelId: number;
   from?: string;
   to?: string;
+  variables?: Record<string, string | string[]>;
   refresh?: boolean;
 };
 

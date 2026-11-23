@@ -133,7 +133,10 @@ export class GrafanaEntityProvider implements EntityProvider {
     /** Provides the credentials for the `catalog` lookups. */
     auth?: AuthService;
   }) {
-    this.instances = options.instances;
+    // This provider only reads; never retain the scaffolder's write token.
+    this.instances = options.instances.map(
+      ({ scaffolderToken: _scaffolderToken, ...instance }) => instance,
+    );
     this.discovery = options.discovery;
     this.logger = options.logger;
     this.taskRunner = options.taskRunner;
