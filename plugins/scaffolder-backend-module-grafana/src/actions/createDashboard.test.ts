@@ -86,6 +86,28 @@ describe('grafana:dashboard:create', () => {
     );
   });
 
+  it('authenticates with scaffolderToken when the instance has one', async () => {
+    const fetch = mockFetch({ metadata: { name: 'my-uid' } });
+    const { handler } = run({
+      instances: [{ ...prodInstance, scaffolderToken: 'write-token' }],
+      // overwrite exercises both requests: the current-state GET probe and
+      // the PUT — each must carry the write token.
+      input: { title: 'My Dashboard', uid: 'my-uid', overwrite: true },
+      fetch,
+    });
+
+    await handler();
+
+    // The fallback to the shared read token is asserted by the test above.
+    const calls = (fetch as jest.Mock).mock.calls;
+    expect(calls).toHaveLength(2);
+    const [, probeInit] = calls[0];
+    const [, putInit] = calls[1];
+    expect(probeInit.headers.Authorization).toBe('Bearer write-token');
+    expect(putInit.method).toBe('PUT');
+    expect(putInit.headers.Authorization).toBe('Bearer write-token');
+  });
+
   it('sends the requested uid and folder', async () => {
     const fetch = mockFetch({ metadata: { name: 'my-uid' } });
     const { handler } = run({

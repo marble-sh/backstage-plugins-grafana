@@ -166,6 +166,21 @@ describe('GrafanaApiClient', () => {
     expect([...url.searchParams.keys()]).toEqual([]);
   });
 
+  it('sends variable overrides as var-<name> parameters', async () => {
+    const { client, fetchMock } = setup({ panelId: 3, series: [] });
+
+    await client.getPanelData({
+      instanceName: 'prod',
+      dashboardUid: 'd1',
+      panelId: 3,
+      variables: { repository: 'org/my-repo', env: ['a', 'b'] },
+    });
+
+    const url = calledUrl(fetchMock);
+    expect(url.searchParams.get('var-repository')).toBe('org/my-repo');
+    expect(url.searchParams.getAll('var-env')).toEqual(['a', 'b']);
+  });
+
   it('encodes instance and dashboard identifiers in panel paths', async () => {
     const { client, fetchMock } = setup({ items: [] });
 

@@ -30,6 +30,24 @@ describe('readGrafanaConfig', () => {
     expect(result.fetchOnDemand).toBe(true);
     expect(result.allowPanelQueries).toBe(true);
     expect(result.panelDataCacheTtl).toEqual({ seconds: 30 });
+    expect(result.allowedVariableOverrides).toBeUndefined();
+  });
+
+  it('reads the variable-override allowlist', () => {
+    const result = read({
+      grafana: { allowedVariableOverrides: ['repository', 'env'] },
+    });
+    expect(result.allowedVariableOverrides).toEqual(['repository', 'env']);
+  });
+
+  it('reads an empty variable-override allowlist', () => {
+    const result = read({ grafana: { allowedVariableOverrides: [] } });
+    expect(result.allowedVariableOverrides).toEqual([]);
+  });
+
+  it('treats a bare YAML key (null) as an absent allowlist', () => {
+    const result = read({ grafana: { allowedVariableOverrides: null } });
+    expect(result.allowedVariableOverrides).toBeUndefined();
   });
 
   it('reads the on-demand flags', () => {

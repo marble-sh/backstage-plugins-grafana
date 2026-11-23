@@ -965,6 +965,21 @@ describe('GrafanaHttpClient', () => {
       });
     });
 
+    it('applies caller variables over the saved dashboard values', async () => {
+      const { fetch, calls } = panelDataFetch();
+      const client = new GrafanaHttpClient({ instance, fetch });
+
+      await client.getPanelData('abc123', 1, {
+        from: 'now-1h',
+        to: 'now',
+        variables: { env: 'staging' },
+      });
+
+      const queryCall = calls.find(c => c.url.includes('/api/ds/query'))!;
+      const body = JSON.parse(String(queryCall.init?.body));
+      expect(body.queries[0].expr).toBe('up{env="staging"}');
+    });
+
     it('defaults the range to the last six hours', async () => {
       const { fetch, calls } = panelDataFetch();
       const client = new GrafanaHttpClient({ instance, fetch });

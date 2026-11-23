@@ -84,6 +84,36 @@ export interface Config {
     allowPanelQueries?: boolean;
 
     /**
+     * Which dashboard template variables callers may override via the
+     * `var-<name>` query parameters of the panel data route.
+     *
+     * Variable values are substituted into the dashboard's query text and the
+     * result is executed with the instance's service-account token, so
+     * overriding a variable effectively edits the query (see "Security
+     * considerations" in the backend README).
+     *
+     *  - Absent (default): any variable reference occurring in the panel's
+     *    queries may be overridden — including Grafana built-ins such as
+     *    `$__interval`, not only variables declared on the dashboard.
+     *  - A list of names: only those variables may be overridden; any other
+     *    `var-<name>` parameter is rejected with `403`.
+     *  - `[]`: every override is rejected.
+     *
+     * **Deny-all must be the explicit empty list `[]`.** Writing the key
+     * with no value (`allowedVariableOverrides:`) is YAML `null`, which
+     * reads as ABSENT — i.e. silently allow-all, not deny-all.
+     *
+     * Entity `grafana/variables` annotations are applied through this same
+     * route, so any variable named by an annotation must be on the list.
+     *
+     * The list scopes which *names* may be overridden, not the values: an
+     * allowed variable's value is still interpolated into the query text
+     * raw, so allow only names whose values cannot change what the query
+     * selects (or use `[]` to deny every override).
+     */
+    allowedVariableOverrides?: string[];
+
+    /**
      * Time-to-live for cached panel listings and panel data. Short by design:
      * it exists to absorb bursts (opening a dashboard queries every panel at
      * once), not to make graphs stale. Defaults to 30 seconds.

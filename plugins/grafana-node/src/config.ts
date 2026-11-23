@@ -38,6 +38,11 @@ export type GrafanaInstanceConfig = {
   title: string;
   baseUrl: string;
   token: string;
+  /**
+   * A separate write-capable token used only by the scaffolder module's
+   * write actions; `token` can then stay read-only.
+   */
+  scaffolderToken?: string;
   namespace: string;
   apis: GrafanaInstanceApis;
   /** Whether dashboard folder titles/links are resolved via `/api/folders`. */
@@ -98,12 +103,14 @@ export function readGrafanaInstance(config: Config): GrafanaInstanceConfig {
   const name = config.getString('name');
   const baseUrl = stripTrailingSlash(config.getString('baseUrl'));
   const token = config.getString('token');
+  const scaffolderToken = config.getOptionalString('scaffolderToken');
 
   return {
     name,
     title: config.getOptionalString('title') ?? name,
     baseUrl,
     token,
+    ...(scaffolderToken ? { scaffolderToken } : {}),
     namespace: deriveNamespace({
       namespace: config.getOptionalString('namespace'),
       stackId: config.getOptionalString('stackId'),

@@ -58,11 +58,17 @@ jobs:
       - name: Lint
         run: yarn lint:all
 
+      - name: List deprecated API usages
+        run: yarn backstage-cli repo list-deprecations
+
       - name: Type check
         run: yarn tsc:full
 
       - name: Validate API reports
         run: yarn build:api-reports --ci
+
+      - name: Validate knip reports
+        run: yarn build:knip-reports --ci
 
       - name: Build all packages
         run: yarn build:all

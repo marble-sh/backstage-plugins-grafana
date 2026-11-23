@@ -73,9 +73,11 @@ export const grafanaPlugin = createBackendPlugin({
             : new CacheGrafanaStore({ cache, ttl: grafanaConfig.cacheTtl });
 
         const instances: GrafanaInstance[] = grafanaConfig.instances.map(
-          instance => ({
-            config: instance,
-            client: new GrafanaHttpClient({ instance }),
+          // The read paths never need the scaffolder's write token; strip it
+          // so no custom GrafanaService implementation can ever see it.
+          ({ scaffolderToken: _scaffolderToken, ...instanceConfig }) => ({
+            config: instanceConfig,
+            client: new GrafanaHttpClient({ instance: instanceConfig }),
           }),
         );
 
@@ -93,6 +95,9 @@ export const grafanaPlugin = createBackendPlugin({
             grafanaService,
             allowOnDemandRefresh: grafanaConfig.allowOnDemandRefresh,
             allowPanelQueries: grafanaConfig.allowPanelQueries,
+            // Passed through verbatim: `[]` means deny-all and must survive —
+            // any truthiness/length shortcut here would silently fail open.
+            allowedVariableOverrides: grafanaConfig.allowedVariableOverrides,
           }),
         );
         httpRouter.addAuthPolicy({ path: '/health', allow: 'unauthenticated' });

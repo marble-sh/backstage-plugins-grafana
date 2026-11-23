@@ -31,7 +31,11 @@ import useAsync from 'react-use/lib/useAsync';
 import { grafanaApiRef } from '../api';
 import { AlertsTable } from './AlertsTable';
 import { DashboardPanels } from './DashboardPanels';
-import { useAlertsRequest, useDashboardsRequest } from './hooks';
+import {
+  useAlertsRequest,
+  useDashboardsRequest,
+  useGrafanaVariables,
+} from './hooks';
 import {
   DEFAULT_TIME_RANGE,
   TimeRangeOption,
@@ -49,6 +53,7 @@ import {
 export const GrafanaDashboardsContent = () => {
   const api = useApi(grafanaApiRef);
   const request = useDashboardsRequest();
+  const variables = useGrafanaVariables();
   const [range, setRange] = useState<TimeRangeOption>(DEFAULT_TIME_RANGE);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -124,6 +129,7 @@ export const GrafanaDashboardsContent = () => {
               dashboard={dashboard}
               range={range}
               refreshKey={refreshKey}
+              variables={variables}
             />
           </AccordionDetails>
         </Accordion>

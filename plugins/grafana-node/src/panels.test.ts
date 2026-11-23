@@ -403,6 +403,60 @@ describe('buildPanelQueries', () => {
     expect(queries[0].expr).toBe('up{env="prod"}');
   });
 
+  it('caller overrideVariables win over saved values and extraVariables', () => {
+    const { queries, warnings } = buildPanelQueries({
+      panel: {
+        id: 1,
+        datasource: { uid: 'ds-1' },
+        targets: [{ refId: 'A', expr: 'up{env="$env",repo="$repository"}' }],
+      },
+      model: {
+        templating: {
+          list: [
+            { name: 'env', current: { value: 'prod' } },
+            { name: 'repository', current: { value: 'saved-repo' } },
+          ],
+        },
+      },
+      range: { from: 'now-1h', to: 'now' },
+      extraVariables: { env: 'never-used' },
+      overrideVariables: { env: 'staging', repository: 'my-repo' },
+    });
+
+    expect(warnings).toEqual([]);
+    expect(queries[0].expr).toBe('up{env="staging",repo="my-repo"}');
+  });
+
+  it('overrideVariables satisfy a declared variable with no saved value, un-skipping its target', () => {
+    const build = (overrideVariables?: Record<string, string>) =>
+      buildPanelQueries({
+        panel: {
+          id: 1,
+          datasource: { uid: 'ds-1' },
+          targets: [{ refId: 'A', expr: 'commits{repo="$repository"}' }],
+        },
+        model: {
+          templating: {
+            // Declared but valueless — the shared-dashboard shape where each
+            // consumer is expected to supply its own value.
+            list: [{ name: 'repository', current: {} }],
+          },
+        },
+        range: { from: 'now-1h', to: 'now' },
+        ...(overrideVariables ? { overrideVariables } : {}),
+      });
+
+    const without = build();
+    expect(without.queries).toEqual([]);
+    expect(without.warnings).toEqual([
+      expect.stringMatching(/Query A was skipped.*\$repository.*no saved/),
+    ]);
+
+    const withOverride = build({ repository: 'org/my-repo' });
+    expect(withOverride.warnings).toEqual([]);
+    expect(withOverride.queries[0].expr).toBe('commits{repo="org/my-repo"}');
+  });
+
   it('skips targets still referencing a variable with no saved value', () => {
     const { queries, warnings } = buildPanelQueries({
       panel: {

@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+import { createHash } from 'crypto';
+
+import { Counter, Meter, metrics } from '@opentelemetry/api';
+
 import { CacheService, LoggerService } from '@backstage/backend-plugin-api';
 import { NotFoundError } from '@backstage/errors';
 import { HumanDuration, durationToMilliseconds } from '@backstage/types';
@@ -29,6 +33,7 @@ import {
   filterDashboards,
   GrafanaClient,
   GrafanaInstanceConfig,
+  TemplateVariables,
 } from '@marble-sh/backstage-plugin-grafana-node';
 import { GrafanaSnapshot, GrafanaStore } from '../store/GrafanaStore';
 
@@ -104,6 +109,13 @@ export type GetPanelDataOptions = {
   from?: string;
   /** Range end, same forms as `from`. Defaults to `now`. */
   to?: string;
+  /**
+   * Template variable values supplied by the caller (for example from an
+   * entity's `grafana/variables` annotation). They take precedence over the
+   * values saved on the dashboard, the same way `var-<name>` URL parameters
+   * override saved values in Grafana's own UI.
+   */
+  variables?: TemplateVariables;
   /** Force a live read, bypassing the panel cache. */
   refresh?: boolean;
 };
@@ -144,6 +156,9 @@ export class DefaultGrafanaService implements GrafanaService {
   private readonly fetchOnDemand: boolean;
   private readonly cache?: CacheService;
   private readonly panelCacheTtlMs: number;
+  private readonly refreshCount: Counter;
+  /** Per-instance timestamp of the last successful refresh in this process. */
+  private readonly lastRefreshAt = new Map<string, number>();
 
   constructor(options: {
     instances: GrafanaInstance[];
@@ -164,6 +179,12 @@ export class DefaultGrafanaService implements GrafanaService {
     cache?: CacheService;
     /** Time-to-live for cached panel data (default 30 seconds). */
     panelDataCacheTtl?: HumanDuration;
+    /**
+     * The OpenTelemetry meter used for the service's metrics
+     * (`grafana.instance.refresh.count` and `grafana.instance.snapshot.age`).
+     * Defaults to the global meter provider; injectable for testing.
+     */
+    meter?: Meter;
   }) {
     this.instances = new Map(
       options.instances.map(instance => [instance.config.name, instance]),
@@ -175,6 +196,26 @@ export class DefaultGrafanaService implements GrafanaService {
     this.panelCacheTtlMs = durationToMilliseconds(
       options.panelDataCacheTtl ?? { seconds: 30 },
     );
+
+    const meter =
+      options.meter ??
+      metrics.getMeter('@marble-sh/backstage-plugin-grafana-backend');
+    this.refreshCount = meter.createCounter('grafana.instance.refresh.count', {
+      description:
+        'Snapshot refreshes per Grafana instance, partitioned by result (ok|error)',
+    });
+    meter
+      .createObservableGauge('grafana.instance.snapshot.age', {
+        description:
+          "Seconds since the instance's last successful snapshot refresh in this process",
+        unit: 's',
+      })
+      .addCallback(gauge => {
+        const now = Date.now();
+        for (const [instance, refreshedAt] of this.lastRefreshAt) {
+          gauge.observe((now - refreshedAt) / 1000, { instance });
+        }
+      });
   }
 
   /** {@inheritDoc GrafanaService.getInstances} */
@@ -265,12 +306,29 @@ export class DefaultGrafanaService implements GrafanaService {
     }
     const from = options.from ?? 'now-6h';
     const to = options.to ?? 'now';
+    const variables = options.variables;
+    // Variable overrides change the queries, so they must key the cache —
+    // otherwise one entity's data would be served for another's.
+    const variablesKey =
+      variables && Object.keys(variables).length > 0
+        ? createHash('sha256')
+            .update(
+              JSON.stringify(
+                Object.entries(variables).sort(([a], [b]) =>
+                  a.localeCompare(b),
+                ),
+              ),
+            )
+            .digest('hex')
+            .slice(0, 16)
+        : '-';
     return this.withPanelCache(
-      `panel-data:v1:${options.instanceName}:${options.dashboardUid}:${options.panelId}:${from}:${to}`,
+      `panel-data:v2:${options.instanceName}:${options.dashboardUid}:${options.panelId}:${from}:${to}:${variablesKey}`,
       () =>
         client.getPanelData!(options.dashboardUid, options.panelId, {
           from,
           to,
+          ...(variables ? { variables } : {}),
         }),
       options.refresh,
     );
@@ -354,20 +412,29 @@ export class DefaultGrafanaService implements GrafanaService {
   private async refreshInstance(
     instanceName: string,
   ): Promise<GrafanaSnapshot> {
+    // Unknown names throw before the try: a caller's typo is not a refresh
+    // failure of any instance.
     const { client } = this.mustGet(instanceName);
-    const [dashboards, alerts] = await Promise.all([
-      client.listDashboards(),
-      client.listAlerts(),
-    ]);
-    const snapshot: GrafanaSnapshot = {
-      dashboards,
-      alerts,
-      fetchedAt: new Date().toISOString(),
-    };
-    await this.store.set(instanceName, snapshot);
-    this.logger.debug(
-      `Refreshed Grafana instance '${instanceName}': ${dashboards.length} dashboards, ${alerts.length} alerts`,
-    );
-    return snapshot;
+    try {
+      const [dashboards, alerts] = await Promise.all([
+        client.listDashboards(),
+        client.listAlerts(),
+      ]);
+      const snapshot: GrafanaSnapshot = {
+        dashboards,
+        alerts,
+        fetchedAt: new Date().toISOString(),
+      };
+      await this.store.set(instanceName, snapshot);
+      this.refreshCount.add(1, { instance: instanceName, result: 'ok' });
+      this.lastRefreshAt.set(instanceName, Date.now());
+      this.logger.debug(
+        `Refreshed Grafana instance '${instanceName}': ${dashboards.length} dashboards, ${alerts.length} alerts`,
+      );
+      return snapshot;
+    } catch (error) {
+      this.refreshCount.add(1, { instance: instanceName, result: 'error' });
+      throw error;
+    }
   }
 }

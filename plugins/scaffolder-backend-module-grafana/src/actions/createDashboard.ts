@@ -174,7 +174,9 @@ export function createGrafanaDashboardCreateAction(options: {
       const collection = `/apis/dashboard.grafana.app/v1/namespaces/${instance.namespace}/dashboards`;
       const itemPath = `${collection}/${encodeURIComponent(uid ?? '')}`;
       const headers = {
-        Authorization: `Bearer ${instance.token}`,
+        // Prefer the dedicated write token; the shared (ideally read-only)
+        // instance token is only a fallback.
+        Authorization: `Bearer ${instance.scaffolderToken ?? instance.token}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       };

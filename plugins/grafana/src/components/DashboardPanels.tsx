@@ -53,8 +53,9 @@ const PanelDataCard = (props: {
   panel: GrafanaPanel;
   range: PanelTimeRange;
   refreshKey: number;
+  variables?: Record<string, string | string[]>;
 }) => {
-  const { panel, range, refreshKey } = props;
+  const { panel, range, refreshKey, variables } = props;
   const api = useApi(grafanaApiRef);
   const isRefresh = useIsRefresh(refreshKey);
 
@@ -66,6 +67,7 @@ const PanelDataCard = (props: {
         panelId: panel.id,
         from: range.from,
         to: range.to,
+        ...(variables ? { variables } : {}),
         refresh: isRefresh(),
       }),
     [
@@ -74,6 +76,9 @@ const PanelDataCard = (props: {
       panel.id,
       range.from,
       range.to,
+      // Variables come from an entity annotation, so they are stable in
+      // practice; serialize for a value-based dependency.
+      JSON.stringify(variables ?? null),
       refreshKey,
     ],
   );
@@ -122,8 +127,13 @@ export const DashboardPanels = (props: {
   range: PanelTimeRange;
   /** Changing this value re-fetches every panel. */
   refreshKey?: number;
+  /**
+   * Template variable overrides applied to every panel query (for example
+   * from the entity's `grafana/variables` annotation).
+   */
+  variables?: Record<string, string | string[]>;
 }) => {
-  const { dashboard, range, refreshKey = 0 } = props;
+  const { dashboard, range, refreshKey = 0, variables } = props;
   const api = useApi(grafanaApiRef);
   const isRefresh = useIsRefresh(refreshKey);
 
@@ -176,6 +186,7 @@ export const DashboardPanels = (props: {
               panel={panel}
               range={range}
               refreshKey={refreshKey}
+              variables={variables}
             />
           </Grid>
         ))}

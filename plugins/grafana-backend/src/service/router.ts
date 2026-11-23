@@ -34,6 +34,50 @@ const toString = (value: unknown): string | undefined =>
 const toBoolean = (value: unknown): boolean =>
   value !== undefined && ['true', '1', ''].includes(String(value));
 
+const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const MAX_VARIABLES = 32;
+const MAX_VARIABLE_VALUE_LENGTH = 1000;
+
+// Collects `var-<name>` query parameters (Grafana's own URL convention) into
+// template-variable overrides. Repeated parameters become multi-values.
+const toVariables = (
+  query: Record<string, unknown>,
+  allowedNames?: string[],
+): Record<string, string | string[]> | undefined => {
+  const allowed = allowedNames ? new Set(allowedNames) : undefined;
+  const variables: Record<string, string | string[]> = {};
+  for (const [key, raw] of Object.entries(query)) {
+    if (!key.startsWith('var-')) {
+      continue;
+    }
+    const name = key.slice('var-'.length);
+    if (!VARIABLE_NAME.test(name)) {
+      throw new InputError(
+        `Invalid variable name '${name}', expected [A-Za-z_][A-Za-z0-9_]*`,
+      );
+    }
+    if (allowed && !allowed.has(name)) {
+      throw new NotAllowedError(
+        `Overriding template variable '${name}' is not allowed by configuration (grafana.allowedVariableOverrides)`,
+      );
+    }
+    const values = toArray(raw) ?? [];
+    if (values.some(value => value.length > MAX_VARIABLE_VALUE_LENGTH)) {
+      throw new InputError(
+        `Variable '${name}' value exceeds ${MAX_VARIABLE_VALUE_LENGTH} characters`,
+      );
+    }
+    variables[name] = values.length === 1 ? values[0] : values;
+  }
+  const names = Object.keys(variables);
+  if (names.length > MAX_VARIABLES) {
+    throw new InputError(
+      `Too many template variables: ${names.length} given, at most ${MAX_VARIABLES} allowed`,
+    );
+  }
+  return names.length > 0 ? variables : undefined;
+};
+
 /**
  * Creates the Express router that exposes the read-only Grafana REST API.
  *
@@ -55,6 +99,15 @@ export async function createRouter(options: {
    * for deployments that want schedule-only Grafana traffic.
    */
   allowPanelQueries?: boolean;
+  /**
+   * When set, only these template variable names may be overridden via
+   * `var-<name>` parameters on the panel data route; any other `var-<name>`
+   * parameter responds 403. An empty list rejects every override. When
+   * absent (default), any variable reference occurring in the panel's
+   * queries may be overridden — including Grafana built-ins such as
+   * `$__interval`, not only variables declared on the dashboard.
+   */
+  allowedVariableOverrides?: string[];
 }): Promise<express.Router> {
   const { grafanaService } = options;
   const allowOnDemandRefresh = options.allowOnDemandRefresh ?? true;
@@ -138,12 +191,17 @@ export async function createRouter(options: {
           `Invalid panel id '${req.params.panelId}', expected an integer`,
         );
       }
+      const variables = toVariables(
+        req.query,
+        options.allowedVariableOverrides,
+      );
       const data = await grafanaService.getPanelData({
         instanceName: req.params.name,
         dashboardUid: req.params.uid,
         panelId: Number(req.params.panelId),
         from: toString(req.query.from),
         to: toString(req.query.to),
+        ...(variables ? { variables } : {}),
         refresh: toRefresh(req.query.refresh),
       });
       res.json(data);

@@ -41,6 +41,7 @@ export function filterDashboards(
 export type GetPanelDataOptions = {
   from?: string;
   to?: string;
+  variables?: TemplateVariables;
 };
 
 // @public
@@ -80,6 +81,7 @@ export type GrafanaInstanceConfig = {
   title: string;
   baseUrl: string;
   token: string;
+  scaffolderToken?: string;
   namespace: string;
   apis: GrafanaInstanceApis;
   resolveFolders: boolean;
@@ -103,4 +105,7 @@ export function readGrafanaInstances(
 
 // @public
 export const slugify: (title: string) => string;
+
+// @public
+export type TemplateVariables = Record<string, string | string[]>;
 ```

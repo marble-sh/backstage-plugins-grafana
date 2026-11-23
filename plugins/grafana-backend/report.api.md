@@ -23,7 +23,9 @@ import { Knex } from 'knex';
 import { ListAlertsOptions } from '@marble-sh/backstage-plugin-grafana-node';
 import { ListDashboardsOptions } from '@marble-sh/backstage-plugin-grafana-node';
 import { LoggerService } from '@backstage/backend-plugin-api';
+import { Meter } from '@opentelemetry/api';
 import { SchedulerServiceTaskScheduleDefinition } from '@backstage/backend-plugin-api';
+import { TemplateVariables } from '@marble-sh/backstage-plugin-grafana-node';
 
 // @public
 export class CacheGrafanaStore implements GrafanaStore {
@@ -37,6 +39,7 @@ export function createRouter(options: {
   grafanaService: GrafanaService;
   allowOnDemandRefresh?: boolean;
   allowPanelQueries?: boolean;
+  allowedVariableOverrides?: string[];
 }): Promise<express.Router>;
 
 // @public
@@ -58,6 +61,7 @@ export class DefaultGrafanaService implements GrafanaService {
     fetchOnDemand?: boolean;
     cache?: CacheService;
     panelDataCacheTtl?: HumanDuration;
+    meter?: Meter;
   });
   getAlerts(options: GetAlertsOptions): Promise<GrafanaAlert[]>;
   getDashboards(options: GetDashboardsOptions): Promise<GrafanaDashboard[]>;
@@ -92,6 +96,7 @@ export type GetPanelDataOptions = {
   panelId: number;
   from?: string;
   to?: string;
+  variables?: TemplateVariables;
   refresh?: boolean;
 };
 
@@ -112,6 +117,7 @@ export type GrafanaBackendConfig = {
   fetchOnDemand: boolean;
   allowPanelQueries: boolean;
   panelDataCacheTtl: HumanDuration;
+  allowedVariableOverrides?: string[];
 };
 
 export { GrafanaClient };

@@ -11,6 +11,11 @@ contribute, start with [CONTRIBUTING.md](../CONTRIBUTING.md).
   release notes.
 - [extending.md](./extending.md) — developer hooks: bringing your own
   stores, clients, entity processing, and UI overrides.
+- [observability.md](./observability.md) — monitoring Backstage itself:
+  which metrics/logs it can emit (entities by kind, per-plugin errors,
+  sign-ins), an importable
+  [example dashboard](./examples/backstage-observability-dashboard.json),
+  and alert suggestions wired back into the entity tabs.
 - [adr/](./adr/) — architecture decision records.
 - [state/](./state/) — the AI agent's durable working notes for this build
   (locked decisions, verified API facts, gotchas). Not user documentation.

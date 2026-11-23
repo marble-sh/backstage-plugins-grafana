@@ -52,6 +52,8 @@ export type ListDashboardsOptions = DashboardFilter;
  */
 export type ListAlertsOptions = AlertFilter;
 
+export type { TemplateVariables } from './panels';
+
 /**
  * The time range for a panel data query. Both bounds accept Grafana time
  * expressions: `now`, `now-<n><s|m|h|d|w>`, or epoch milliseconds.
@@ -63,6 +65,13 @@ export type GetPanelDataOptions = {
   from?: string;
   /** The end of the range. Defaults to `now`. */
   to?: string;
+  /**
+   * Template variable values supplied by the caller (for example from an
+   * entity's `grafana/variables` annotation). They take precedence over the
+   * values saved on the dashboard, the same way `var-<name>` URL parameters
+   * override saved values in Grafana's own UI.
+   */
+  variables?: TemplateVariables;
 };
 
 /**
@@ -392,6 +401,7 @@ export class GrafanaHttpClient implements GrafanaClient {
       model,
       range: { from, to },
       ...(extraVariables ? { extraVariables } : {}),
+      ...(options.variables ? { overrideVariables: options.variables } : {}),
     });
     const resolved = await this.resolveQueryDatasources(queries);
     warnings.push(...resolved.warnings);

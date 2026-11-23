@@ -94,15 +94,51 @@ function makeApi(overrides: Partial<GrafanaApi> = {}): GrafanaApi {
   } as GrafanaApi;
 }
 
-function renderContent(api: GrafanaApi, children: ReactNode) {
+function renderContent(
+  api: GrafanaApi,
+  children: ReactNode,
+  withEntity: Entity = entity,
+) {
   return renderInTestApp(
     <TestApiProvider apis={[[grafanaApiRef, api]]}>
-      <EntityProvider entity={entity}>{children}</EntityProvider>
+      <EntityProvider entity={withEntity}>{children}</EntityProvider>
     </TestApiProvider>,
   );
 }
 
 describe('GrafanaDashboardsContent', () => {
+  it('applies the grafana/variables annotation to every panel query', async () => {
+    const api = makeApi({
+      listPanels: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          title: 'Requests',
+          type: 'timeseries',
+          kind: 'timeseries',
+          dashboardUid: 'dash-1',
+          instanceName: 'prod',
+        },
+      ]),
+    });
+    renderContent(api, <GrafanaDashboardsContent />, {
+      ...entity,
+      metadata: {
+        ...entity.metadata,
+        annotations: {
+          ...entity.metadata.annotations,
+          'grafana/variables': 'repository=org/my-repo, organization=my-org',
+        },
+      },
+    });
+
+    await screen.findByText('Requests');
+    expect(api.getPanelData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variables: { repository: 'org/my-repo', organization: 'my-org' },
+      }),
+    );
+  });
+
   it('requests dashboards using the entity selectors', async () => {
     const api = makeApi();
     renderContent(api, <GrafanaDashboardsContent />);

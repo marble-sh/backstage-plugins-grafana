@@ -18,6 +18,12 @@ import { CacheService } from '@backstage/backend-plugin-api';
 import { mockServices } from '@backstage/backend-test-utils';
 import { NotFoundError } from '@backstage/errors';
 import {
+  AggregationTemporality,
+  InMemoryMetricExporter,
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
+import {
   GrafanaAlert,
   GrafanaDashboard,
   GrafanaPanel,
@@ -96,14 +102,61 @@ function makeService(
   });
 }
 
+/**
+ * An isolated OTel meter whose recorded data points can be collected on
+ * demand. `shutdown` must be awaited so the reader's export timer does not
+ * outlive the test.
+ */
+function makeMeter() {
+  const exporter = new InMemoryMetricExporter(
+    AggregationTemporality.CUMULATIVE,
+  );
+  const reader = new PeriodicExportingMetricReader({
+    exporter,
+    exportIntervalMillis: 60_000,
+  });
+  const provider = new MeterProvider({ readers: [reader] });
+  const collect = async () => {
+    await reader.forceFlush();
+    const batches = exporter.getMetrics();
+    const latest = batches[batches.length - 1];
+    const points: Record<
+      string,
+      Array<{ value: number; attrs: Record<string, unknown> }>
+    > = {};
+    for (const scope of latest?.scopeMetrics ?? []) {
+      for (const metric of scope.metrics) {
+        points[metric.descriptor.name] = metric.dataPoints.map(point => ({
+          value: point.value as number,
+          attrs: point.attributes,
+        }));
+      }
+    }
+    return points;
+  };
+  return {
+    meter: provider.getMeter('test'),
+    collect,
+    shutdown: () => provider.shutdown(),
+  };
+}
+
 describe('DefaultGrafanaService', () => {
-  it('lists the configured instances', () => {
+  it('lists the configured instances without exposing any token', () => {
     const service = makeService([
-      { config: configFor('prod'), client: new FakeClient([]) },
+      {
+        config: {
+          ...configFor('prod'),
+          token: 'read-secret',
+          scaffolderToken: 'write-secret',
+        },
+        client: new FakeClient([]),
+      },
       { config: configFor('staging'), client: new FakeClient([]) },
     ]);
 
-    expect(service.getInstances()).toEqual([
+    const instances = service.getInstances();
+    expect(instances).toEqual([
       { name: 'prod', title: 'Title prod', url: 'https://prod.example.com' },
       {
         name: 'staging',
@@ -111,6 +164,55 @@ describe('DefaultGrafanaService', () => {
         url: 'https://staging.example.com',
       },
     ]);
+    const serialized = JSON.stringify(instances);
+    expect(serialized).not.toContain('read-secret');
+    expect(serialized).not.toContain('write-secret');
+  });
+
+  it('counts refreshes by result and reports snapshot age per instance', async () => {
+    const { meter, collect, shutdown } = makeMeter();
+    try {
+      const ok = new FakeClient([dash('a')]);
+      const failing = new FakeClient([]);
+      failing.listDashboards = async () => {
+        throw new Error('boom');
+      };
+      const service = new DefaultGrafanaService({
+        instances: [
+          { config: configFor('prod'), client: ok },
+          { config: configFor('staging'), client: failing },
+        ],
+        store: new MemoryStore(),
+        logger: mockServices.logger.mock(),
+        meter,
+      });
+
+      // Fan-out refresh: prod succeeds, staging fails (swallowed + logged).
+      await service.refresh();
+
+      const points = await collect();
+      expect(points['grafana.instance.refresh.count']).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            value: 1,
+            attrs: { instance: 'prod', result: 'ok' },
+          }),
+          expect.objectContaining({
+            value: 1,
+            attrs: { instance: 'staging', result: 'error' },
+          }),
+        ]),
+      );
+
+      // Only the successfully refreshed instance reports a snapshot age.
+      const ages = points['grafana.instance.snapshot.age'];
+      expect(ages).toHaveLength(1);
+      expect(ages[0].attrs).toEqual({ instance: 'prod' });
+      expect(ages[0].value).toBeGreaterThanOrEqual(0);
+      expect(ages[0].value).toBeLessThan(60);
+    } finally {
+      await shutdown();
+    }
   });
 
   it('fetches live and stores a snapshot on a cache miss', async () => {
@@ -368,7 +470,11 @@ describe('DefaultGrafanaService', () => {
       getPanelDataCalls: Array<{
         uid: string;
         panelId: number;
-        options?: { from?: string; to?: string };
+        options?: {
+          from?: string;
+          to?: string;
+          variables?: Record<string, string | string[]>;
+        };
       }> = [];
       async getPanels(uid: string): Promise<GrafanaPanel[]> {
         this.getPanelsCalls += 1;
@@ -488,6 +594,34 @@ describe('DefaultGrafanaService', () => {
       await service.getPanelData(options);
       await service.getPanelData({ ...options, refresh: true });
       expect(client.getPanelDataCalls).toHaveLength(2);
+    });
+
+    it('forwards variable overrides to the client and keys the cache by them', async () => {
+      const client = new PanelClient([]);
+      const cache = new MemoryCache();
+      const service = makePanelService(client, cache);
+
+      const base = {
+        instanceName: 'prod',
+        dashboardUid: 'd',
+        panelId: 1,
+        from: 'now-1h',
+        to: 'now',
+      };
+      // Two entities supplying different variable values must never share a
+      // cache entry — that would serve one entity's data for another.
+      await service.getPanelData({ ...base, variables: { repo: 'a' } });
+      await service.getPanelData({ ...base, variables: { repo: 'b' } });
+      await service.getPanelData({ ...base });
+      expect(client.getPanelDataCalls).toHaveLength(3);
+      expect(client.getPanelDataCalls[0].options?.variables).toEqual({
+        repo: 'a',
+      });
+      expect(client.getPanelDataCalls[2].options?.variables).toBeUndefined();
+
+      // Same variables again: served from the cache.
+      await service.getPanelData({ ...base, variables: { repo: 'a' } });
+      expect(client.getPanelDataCalls).toHaveLength(3);
     });
 
     it('treats different ranges and panels as distinct cache entries', async () => {
