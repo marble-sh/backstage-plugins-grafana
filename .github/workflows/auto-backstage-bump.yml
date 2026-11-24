@@ -77,7 +77,8 @@ jobs:
         env:
           LATEST: ${{ steps.rel.outputs.latest }}
         run: |
-          yarn backstage-cli versions:bump --release "$LATEST"
+          # The bump's yarn install must update the lockfile even in CI.
+          YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn backstage-cli versions:bump --release "$LATEST"
           # versions:bump rewrites the yarn-plugin spec with double quotes.
           yarn prettier --write .yarnrc.yml
           # API reports read dist-types; create them before generating.
